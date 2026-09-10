@@ -1,0 +1,19 @@
+# Normalise text to LF in the repository so the tree does not churn between
+# machines. Without this, Git warns on every add here and a checkout elsewhere
+# can show every file as modified.
+* text=auto eol=lf
+
+# Binary assets — never munge these, and don't try to diff them.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.mp3  binary
+*.ogg  binary
+*.wav  binary
+*.ttf  binary
+*.woff  binary
+*.woff2 binary
+*.zip  binary
+*.swf  binary
