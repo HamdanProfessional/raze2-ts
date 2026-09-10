@@ -1,0 +1,92 @@
+[
+ {
+  "id": "cat",
+  "name": "Oh Hi Kitty",
+  "desc": "'lol' at the secret lol cat.",
+  "rew": [
+   "mode",
+   "lol cats"
+  ]
+ },
+ {
+  "id": "health",
+  "name": "Love is Blind",
+  "desc": "Dance with the jolly heart.",
+  "rew": [
+   "mode",
+   "4x Health"
+  ]
+ },
+ {
+  "id": "ammo",
+  "name": "I hate nature!",
+  "desc": "Trim the foliage.",
+  "rew": [
+   "mode",
+   "Unlimited Ammo"
+  ]
+ },
+ {
+  "id": "moon",
+  "name": "Reach for the Sky",
+  "desc": "Until you touch the moon.",
+  "rew": [
+   "mode",
+   "Moon Corpses"
+  ]
+ },
+ {
+  "id": "humanwin",
+  "name": "A New Hope",
+  "desc": "Complete the human campaign.",
+  "rew": [
+   "credits",
+   500
+  ]
+ },
+ {
+  "id": "alienwin",
+  "name": "A New Era",
+  "desc": "Complete the alien campaign.",
+  "rew": [
+   "credits",
+   1000
+  ]
+ },
+ {
+  "id": "abilities",
+  "name": "Versatile",
+  "desc": "Purchase 4 abilities.",
+  "rew": [
+   "credits",
+   300
+  ]
+ },
+ {
+  "id": "equipment",
+  "name": "Toolkit",
+  "desc": "Purchase 3 equipment in each category.",
+  "rew": [
+   "credits",
+   300
+  ]
+ },
+ {
+  "id": "bonus1",
+  "name": "Stylish",
+  "desc": "Unlock 15 kill bonuses.",
+  "rew": [
+   "credits",
+   500
+  ]
+ },
+ {
+  "id": "bonus2",
+  "name": "Kill Enthusiast",
+  "desc": "Unlock 30 kill bonuses.",
+  "rew": [
+   "credits",
+   800
+  ]
+ }
+]

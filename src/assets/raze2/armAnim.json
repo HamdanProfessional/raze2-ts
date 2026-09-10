@@ -1,0 +1,131 @@
+{
+ "cell": [
+  150,
+  178
+ ],
+ "cols": 10,
+ "anchor": [
+  0.1856,
+  0.44901
+ ],
+ "skinFrame": 3,
+ "note": "Authentic Raze 2 aiming-arm animation baked from DefineSprite_387 (Unit_Arms1) composited with the weapon's own gun art from DefineSprite_380, exactly as Guns.as layers them at runtime. One sheet per weapon holding that weapon's whole pose band packed densely across `cols`: cell n is band frame n, with `idle`, `fire` (the recoil animation) and `reload` giving 0-based cell ranges into it. `anchor` is the arm clip's shoulder origin as a fraction of a cell -- set it as the sprite anchor and rotate there to aim.",
+ "poses": {
+  "pistol": {
+   "count": 54,
+   "idle": 0,
+   "fire": [
+    1,
+    15
+   ],
+   "reload": [
+    16,
+    53
+   ],
+   "rows": 6
+  },
+  "rifle": {
+   "count": 44,
+   "idle": 0,
+   "fire": [
+    1,
+    4
+   ],
+   "reload": [
+    5,
+    43
+   ],
+   "rows": 5
+  },
+  "shotgun": {
+   "count": 83,
+   "idle": 0,
+   "fire": [
+    1,
+    20
+   ],
+   "reload": [
+    21,
+    82
+   ],
+   "rows": 9
+  },
+  "sniper": {
+   "count": 60,
+   "idle": 0,
+   "fire": [
+    1,
+    14
+   ],
+   "reload": [
+    15,
+    59
+   ],
+   "rows": 6
+  },
+  "heavy": {
+   "count": 44,
+   "idle": 0,
+   "fire": [
+    1,
+    5
+   ],
+   "reload": [
+    6,
+    43
+   ],
+   "rows": 5
+  },
+  "rocket": {
+   "count": 70,
+   "idle": 0,
+   "fire": [
+    1,
+    13
+   ],
+   "reload": [
+    14,
+    69
+   ],
+   "rows": 7
+  }
+ },
+ "weapons": {
+  "pistol": "pistol",
+  "plaspistol": "pistol",
+  "burster": "pistol",
+  "mauser": "pistol",
+  "uzi": "pistol",
+  "magnum": "pistol",
+  "sparkgun": "pistol",
+  "blaster": "pistol",
+  "blood": "pistol",
+  "shotgun": "shotgun",
+  "pshotgun": "shotgun",
+  "zapper": "rifle",
+  "tshotgun": "shotgun",
+  "pcanon": "shotgun",
+  "arifle": "rifle",
+  "alienrifle": "rifle",
+  "laserrifle": "rifle",
+  "icegun": "rocket",
+  "arifl2": "rifle",
+  "sniper": "sniper",
+  "railgun": "sniper",
+  "asniper": "sniper",
+  "sniper2": "sniper",
+  "railgun2": "sniper",
+  "chaingun": "heavy",
+  "sawgun": "heavy",
+  "beamer": "rocket",
+  "destroyer": "heavy",
+  "flamethrower": "heavy",
+  "rocket": "rocket",
+  "icannon": "rocket",
+  "sticklaunch": "rifle",
+  "hrocket": "rocket",
+  "spitter": "heavy",
+  "creditsgun": "rifle",
+  "hrocket2": "rocket"
+ }
+}

@@ -1,0 +1,3927 @@
+{
+ "human": [
+  {
+   "stage": 0,
+   "scoreCap": 15,
+   "mode": "Deathmatch",
+   "modeCode": "dm",
+   "teams": 2,
+   "map": "tut",
+   "overallDiff": 1,
+   "playerSkin": "raze",
+   "music": "M_Throwdown",
+   "title": "Breaking In",
+   "desc": "It’s been 9 years since the last invasion. Relearn the ropes of battle from our highest ranking officer, Johnny Rockit",
+   "cutscene": {
+    "preSong": "M_Infernal",
+    "preFrames": "[13,1,2]",
+    "postSong": "M_Throwdown",
+    "postFrames": "[4]"
+   },
+   "bots": [
+    {
+     "name": "J. Rockit",
+     "team": 1,
+     "skin": "rambo",
+     "level": 6,
+     "weapon": "johnny",
+     "ability": "sword",
+     "equip": "johnny",
+     "raw": [
+      "\"aimPlayer\"",
+      "true",
+      "\"speak\"",
+      "\"b\"",
+      "\"spawn\"",
+      "\"x\"",
+      "160",
+      "\"y\"",
+      "513",
+      "\"node\"",
+      "\"a\""
+     ],
+     "extra": {
+      "aimPlayer": true,
+      "speak": "b",
+      "spawn": {
+       "x": 160,
+       "y": 513,
+       "node": "a"
+      }
+     }
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "aspace",
+     "level": 3,
+     "weapon": "alien",
+     "ability": "none",
+     "equip": "alien",
+     "extra": {
+      "noSpawn": true
+     }
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "aspace",
+     "level": 3,
+     "weapon": "alien",
+     "ability": "none",
+     "equip": "alien",
+     "extra": {
+      "noSpawn": true
+     }
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Perfect, communications are online!",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Okay {player}, I'll talk to you through here now.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Watch out, here they come!",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "AHHHRRG! Take that!",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Hey, remmeber to use your ability if you're low on ammo!",
+     "time": 6,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Just a few more, let's show 'em what we're made of!",
+     "time": 6,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 1,
+   "scoreCap": 30,
+   "mode": "Deathmatch",
+   "modeCode": "dm",
+   "teams": 2,
+   "map": "city2",
+   "overallDiff": 1,
+   "playerSkin": "raze",
+   "music": "M_Necro",
+   "title": "Survivor Lookout",
+   "desc": "One week ago we lost communications with our military ship Echo-1. We believe it was attacked and there may be survivors in a zombie quarantine zone. Go check it out but be warned, there’s been reports of many zombies in the area.",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": null,
+    "postFrames": null
+   },
+   "bots": [
+    {
+     "name": "J. Rockit",
+     "team": 1,
+     "skin": "rambo",
+     "level": 9,
+     "weapon": "johnny",
+     "ability": "sword",
+     "equip": "johnny"
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zurban",
+     "level": 1,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "noSpawn": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zbeach",
+     "level": 1,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "noSpawn": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zelderly",
+     "level": 1,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "noSpawn": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zbiker",
+     "level": 1,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "noSpawn": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zbiker2",
+     "level": 1,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "noSpawn": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zurban",
+     "level": 1,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "noSpawn": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zbeach",
+     "level": 1,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "noSpawn": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zelderly",
+     "level": 1,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "noSpawn": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zbiker",
+     "level": 1,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "noSpawn": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zbiker2",
+     "level": 1,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "noSpawn": true
+     }
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "What... There's no one here?",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "I have a bad feeling about this...",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Ah, I found one! Kill it!",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Wait a second, more are coming. Stay sharp!",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "There's too many of them! Keep shooting!",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "We're surrounded! We need an evacuation! Repeat, we need an Evac Now!",
+     "time": 8,
+     "speaker": null
+    },
+    {
+     "whoUnit": null,
+     "whoPortrait": "girl",
+     "text": "Roger, Evac is on it's way. Hold tight guys.",
+     "time": 6,
+     "speaker": "Dani"
+    },
+    {
+     "whoUnit": null,
+     "whoPortrait": "girl",
+     "text": "Landing zone is too hot, kill as many as you can and we'll pick you up!",
+     "time": 7,
+     "speaker": "Dani"
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Roger that, let's do this {player}!",
+     "time": 8,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 2,
+   "scoreCap": 20,
+   "mode": "Elimination",
+   "modeCode": "elim",
+   "teams": 2,
+   "map": "city",
+   "overallDiff": 1,
+   "playerSkin": "mine",
+   "music": "M_Warhead",
+   "title": "Sweep and Clear",
+   "desc": "We’re sending you back in more equipped for the situation. This time you’ll have flame throwers and new, flame resistant armor. Clear the city of infected and secure any survivors.",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": null,
+    "postFrames": null
+   },
+   "bots": [
+    {
+     "name": "J. Rockit",
+     "team": 1,
+     "skin": "mine",
+     "level": 9,
+     "weapon": "explosives",
+     "ability": "sword",
+     "equip": "explosives",
+     "extra": {
+      "startWeap": 5
+     }
+    },
+    {
+     "name": "Cpt. Biggs",
+     "team": 1,
+     "skin": "raze3",
+     "level": 10,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "noSpawn": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zurban",
+     "level": 1,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "lives": 3,
+      "dblFire": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zbeach",
+     "level": 1,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "lives": 3,
+      "dblFire": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zelderly",
+     "level": 1,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "lives": 3,
+      "dblFire": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zbiker",
+     "level": 1,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "lives": 3,
+      "dblFire": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zbiker2",
+     "level": 1,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "lives": 3,
+      "dblFire": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zurban",
+     "level": 1,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "lives": 3,
+      "dblFire": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zbeach",
+     "level": 1,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "lives": 3,
+      "dblFire": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zelderly",
+     "level": 1,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "lives": 3,
+      "dblFire": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zbiker",
+     "level": 1,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "lives": 3,
+      "dblFire": true
+     }
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "A survivor? Are you from the crashed Echo-1?",
+     "time": 6,
+     "speaker": null
+    },
+    {
+     "whoUnit": 2,
+     "whoPortrait": null,
+     "text": "Yes I'm the captain, please get out of here!",
+     "time": 6,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Copy that, lets clear out these zombies and I'll call for evac.",
+     "time": 8,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Alright lets clean this place up!",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Keep your eyes peeled for any survivors",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 2,
+     "whoPortrait": null,
+     "text": "Hey, don't shoot!",
+     "time": 8,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 3,
+   "scoreCap": 16,
+   "mode": "Deathmatch",
+   "modeCode": "dm",
+   "teams": 2,
+   "map": "space2",
+   "overallDiff": 2,
+   "playerSkin": "raze2",
+   "music": "M_Infernal",
+   "title": "Cause and Effect",
+   "desc": "Play as Captain Biggs one week ago, and watch the events that caused his Echo-1 ship to crash, and start the whole alien invasion.",
+   "cutscene": {
+    "preSong": "M_Theloop",
+    "preFrames": "[6,8]",
+    "postSong": null,
+    "postFrames": "[10,9]"
+   },
+   "bots": [
+    {
+     "name": "Transport Bot",
+     "team": 1,
+     "skin": "bspace",
+     "level": 6,
+     "weapon": "robot",
+     "ability": "static",
+     "equip": "robot"
+    },
+    {
+     "name": "Transport Bot",
+     "team": 1,
+     "skin": "bspace",
+     "level": 6,
+     "weapon": "robot",
+     "ability": "static",
+     "equip": "robot"
+    },
+    {
+     "name": "Transport Bot",
+     "team": 1,
+     "skin": "bspace",
+     "level": 6,
+     "weapon": "robot",
+     "ability": "static",
+     "equip": "robot"
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "aspace",
+     "level": 4,
+     "weapon": "alien",
+     "ability": "none",
+     "equip": "alien",
+     "extra": {
+      "noSpawn": true
+     }
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "aspace",
+     "level": 4,
+     "weapon": "alien",
+     "ability": "none",
+     "equip": "alien",
+     "extra": {
+      "noSpawn": true
+     }
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "aspace",
+     "level": 4,
+     "weapon": "alien",
+     "ability": "none",
+     "equip": "alien",
+     "extra": {
+      "noSpawn": true
+     }
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "What the... Why did they attack us?",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "AI, what's the ship status?",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Mainframe: Offline.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Thrusters: Offline.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Autocannons: Offline.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Communications: Offline.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Escape Pods: ...",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Escape Pods: Operational.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Well at least the... Incoming! Open fire!",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "What's going on here, why would they attack us?",
+     "time": 6,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Help me kill these aliens fast...",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "I need to warn the people of earth!",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Affirmative.",
+     "time": null,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 4,
+   "scoreCap": 5,
+   "mode": "Capture the Flag",
+   "modeCode": "ctf",
+   "teams": 2,
+   "map": "space",
+   "overallDiff": 2,
+   "playerSkin": "raze",
+   "music": "M_Ricochet",
+   "title": "Retrieval",
+   "desc": "The aliens must be attacking because they think we have their artifacts. Retrieve them from the crashed wreckage so we can return them and end this war once and for all.",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": null,
+    "postFrames": null
+   },
+   "bots": [
+    {
+     "name": "J. Rockit",
+     "team": 1,
+     "skin": "space",
+     "level": 9,
+     "weapon": "johnny",
+     "ability": "sword",
+     "equip": "johnny"
+    },
+    {
+     "name": "Transport Bot",
+     "team": 2,
+     "skin": "bspace",
+     "level": 4,
+     "weapon": "robot",
+     "ability": "static",
+     "equip": "robot"
+    },
+    {
+     "name": "Transport Bot",
+     "team": 2,
+     "skin": "bspace",
+     "level": 4,
+     "weapon": "robot",
+     "ability": "static",
+     "equip": "robot"
+    },
+    {
+     "name": "Transport Bot",
+     "team": 2,
+     "skin": "bspace",
+     "level": 4,
+     "weapon": "robot",
+     "ability": "static",
+     "equip": "robot"
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 2,
+     "whoPortrait": null,
+     "text": "Intruder alert.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 2,
+     "whoPortrait": null,
+     "text": "Intruder alert.\\nDestroy intruders.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "What, us? We're on your side!",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 2,
+     "whoPortrait": null,
+     "text": "Verification failed.\\nDestroy intruders.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "This is no use, we need to get those artifacts!",
+     "time": 6,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Woohoo! Keep it up, almost done!",
+     "time": null,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 5,
+   "scoreCap": 10,
+   "mode": "Juggernaught",
+   "modeCode": "jug",
+   "teams": 0,
+   "map": "jungle",
+   "overallDiff": 3,
+   "playerSkin": "raze",
+   "music": "M_Throwdown",
+   "title": "New Recruits",
+   "desc": "Before we give back the artifacts, we’re having our top scientists look into them. There has to be a reason the aliens want them so badly. In the meantime, show our new recruits how it’s done against some training bots in our testing dome.",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": null,
+    "postFrames": null
+   },
+   "bots": [
+    {
+     "name": "Training Bot",
+     "team": 0,
+     "skin": "bjungle",
+     "level": 3,
+     "weapon": "robot",
+     "ability": "static",
+     "equip": "robot"
+    },
+    {
+     "name": "Training Bot",
+     "team": 0,
+     "skin": "bjungle",
+     "level": 3,
+     "weapon": "robot",
+     "ability": "static",
+     "equip": "robot"
+    },
+    {
+     "name": "Training Bot",
+     "team": 0,
+     "skin": "bjungle",
+     "level": 3,
+     "weapon": "robot",
+     "ability": "static",
+     "equip": "robot"
+    },
+    {
+     "name": "Training Bot",
+     "team": 0,
+     "skin": "bjungle",
+     "level": 3,
+     "weapon": "robot",
+     "ability": "static",
+     "equip": "robot"
+    },
+    {
+     "name": "Training Bot",
+     "team": 0,
+     "skin": "bjungle",
+     "level": 3,
+     "weapon": "robot",
+     "ability": "static",
+     "equip": "robot"
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": null,
+     "whoPortrait": "girl",
+     "text": "Alright recruits, listen up.",
+     "time": 5,
+     "speaker": "Instructor"
+    },
+    {
+     "whoUnit": null,
+     "whoPortrait": "girl",
+     "text": "{player} here is our top soldier, so take notes.",
+     "time": 4,
+     "speaker": "Instructor"
+    },
+    {
+     "whoUnit": null,
+     "whoPortrait": "justin",
+     "text": "What's going on, why does everyone keep switching teams?",
+     "time": 6,
+     "speaker": "Recruit"
+    },
+    {
+     "whoUnit": null,
+     "whoPortrait": "girl",
+     "text": "This is Juggernaught. Everyone is teamed up against the Juggernaught.",
+     "time": 6,
+     "speaker": "Instructor"
+    },
+    {
+     "whoUnit": null,
+     "whoPortrait": "girl",
+     "text": "If you kill the Juggernaught, you become the Juggernaught.",
+     "time": 6,
+     "speaker": "Instructor"
+    },
+    {
+     "whoUnit": null,
+     "whoPortrait": "justin",
+     "text": "Oh right, I get it.",
+     "time": 4,
+     "speaker": "Recruit"
+    },
+    {
+     "whoUnit": null,
+     "whoPortrait": "girl",
+     "text": "Ohh nicely done, did everyone see that?",
+     "time": 4,
+     "speaker": "Instructor"
+    },
+    {
+     "whoUnit": null,
+     "whoPortrait": "justin",
+     "text": "Man, this guy is good...",
+     "time": 4,
+     "speaker": "Recruit"
+    },
+    {
+     "whoUnit": null,
+     "whoPortrait": "girl",
+     "text": "Wow perfect, just perfect.",
+     "time": 4,
+     "speaker": "Instructor"
+    }
+   ]
+  },
+  {
+   "stage": 6,
+   "scoreCap": 100,
+   "mode": "Domination",
+   "modeCode": "dom",
+   "teams": 2,
+   "map": "ocean",
+   "overallDiff": 3,
+   "playerSkin": "raze",
+   "music": "M_Theloop",
+   "title": "Hold the fort",
+   "desc": "Our researchers are still looking into the power of the artifacts, but the aliens have discovered the underwater lab. Go there and secure the artifacts, we can’t let them go until we know their full potential.",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": null,
+    "postFrames": "[14]"
+   },
+   "bots": [
+    {
+     "name": "J. Rockit",
+     "team": 1,
+     "skin": "mine",
+     "level": 9,
+     "weapon": "johnny",
+     "ability": "sword",
+     "equip": "johnny"
+    },
+    {
+     "name": "Security Bot",
+     "team": 1,
+     "skin": "bsnow",
+     "level": 5,
+     "weapon": "robot",
+     "ability": "static",
+     "equip": "robot"
+    },
+    {
+     "name": "Security Bot",
+     "team": 1,
+     "skin": "bsnow",
+     "level": 5,
+     "weapon": "robot",
+     "ability": "static",
+     "equip": "robot"
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "amarine",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "mine",
+     "equip": "alien"
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "amarine",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "mine",
+     "equip": "alien"
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "amarine",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "mine",
+     "equip": "alien"
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zbeach",
+     "level": 5,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie"
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": null,
+     "whoPortrait": "addison",
+     "text": "Thank god you're here! They're trying to steal the artifacts!",
+     "time": 5,
+     "speaker": "Scientist"
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "No problem brutha, we'll lock these babies down!",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 2,
+     "whoPortrait": null,
+     "text": "Land Mines detected, Proceed with caution.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Eugh ah, achoo!",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "I hate wearing suits.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "But until I can breath underwater, I guess I have no choice.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": null,
+     "whoPortrait": "addison",
+     "text": "Yes, this is looking good... Keep defending those artifacts!",
+     "time": 6,
+     "speaker": "Scientist"
+    },
+    {
+     "whoUnit": null,
+     "whoPortrait": "addison",
+     "text": "I need more time... Just a little longer...",
+     "time": 6,
+     "speaker": "Scientist"
+    },
+    {
+     "whoUnit": null,
+     "whoPortrait": "addison",
+     "text": "Almost done...",
+     "time": 5,
+     "speaker": "Scientist"
+    }
+   ]
+  },
+  {
+   "stage": 7,
+   "scoreCap": 15,
+   "mode": "Deathmatch",
+   "modeCode": "dm",
+   "teams": 0,
+   "map": "desert2",
+   "overallDiff": 4,
+   "playerSkin": "raze",
+   "music": "M_Rocket",
+   "title": "My First Mission",
+   "desc": "Alien shipyards have been discovered in the desert. They’re actually building more ships on our planet. Take the new recruits on their very first mission and show ‘em how it’s done by getting the most kills on your team.",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": null,
+    "postFrames": "[11]"
+   },
+   "bots": [
+    {
+     "name": "J. Rockit",
+     "team": 1,
+     "skin": "rambo",
+     "level": 9,
+     "weapon": "johnny",
+     "ability": "sword",
+     "equip": "johnny"
+    },
+    {
+     "name": "Md. Sage",
+     "team": 1,
+     "skin": "soldier",
+     "level": 6,
+     "weapon": "medic",
+     "ability": "heal",
+     "equip": "medic"
+    },
+    {
+     "name": "Ex. Treem",
+     "team": 1,
+     "skin": "soldier2",
+     "level": 6,
+     "weapon": "explosives",
+     "ability": "grenade",
+     "equip": "explosives"
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "adesert",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "mine",
+     "equip": "alien"
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "adesert",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "mine",
+     "equip": "alien"
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "adesert",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "mine",
+     "equip": "alien"
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Alright, you guys ready to see how a real pro does it?",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Show 'em how it's done {player}",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Hey, what are you guys doin'? Introduce yourselves!",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 2,
+     "whoPortrait": null,
+     "text": "Oh right uh... Field Medic, reporting for duty!",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 3,
+     "whoPortrait": null,
+     "text": "I'm Treem the Explosives Specialist.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 3,
+     "whoPortrait": null,
+     "text": "Best stay far from me unless you want to get burned.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "That's it? Well you already know me, expert at close quarters combat.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Watch out for those land mines guys, they're everywhere!",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 2,
+     "whoPortrait": null,
+     "text": "Woooohooo! I can get used to this!",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 3,
+     "whoPortrait": null,
+     "text": "Hah, they burn so easily.",
+     "time": 5,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 8,
+   "scoreCap": 150,
+   "mode": "Domination",
+   "modeCode": "dom",
+   "teams": 2,
+   "map": "snow",
+   "overallDiff": 5,
+   "playerSkin": "raze",
+   "music": "M_Theloop",
+   "title": "Shocking Discovery",
+   "desc": "We’ve found out the true nature of the artifacts but it seems that the aliens have found their location once again, they seem to be giving out some sort of GPS signal. Secure the artifacts at all costs.",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": "M_Infernal",
+    "postFrames": "[12,17,5,20]"
+   },
+   "bots": [
+    {
+     "name": "J. Rockit",
+     "team": 1,
+     "skin": "rambo",
+     "level": 9,
+     "weapon": "johnny",
+     "ability": "sword",
+     "equip": "johnny"
+    },
+    {
+     "name": "Md. Sage",
+     "team": 1,
+     "skin": "soldier",
+     "level": 6,
+     "weapon": "medic",
+     "ability": "heal",
+     "equip": "medic"
+    },
+    {
+     "name": "Ex. Treem",
+     "team": 1,
+     "skin": "soldier2",
+     "level": 6,
+     "weapon": "explosives",
+     "ability": "grenade",
+     "equip": "explosives"
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "asnow",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien",
+     "extra": {
+      "noSpawn": true
+     }
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "asnow",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien",
+     "extra": {
+      "noSpawn": true
+     }
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "asnow",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien",
+     "extra": {
+      "noSpawn": true
+     }
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "asnow",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien",
+     "extra": {
+      "noSpawn": true
+     }
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 2,
+     "whoPortrait": null,
+     "text": "Okay we're here, let's do this!",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Wait wait, there's no one else here...",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 3,
+     "whoPortrait": null,
+     "text": "Yeah, they all got scared and ran home to mama!",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "No, something doesn't feel right...",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Ambush! Open fire!",
+     "time": 4,
+     "speaker": null
+    },
+    {
+     "whoUnit": 2,
+     "whoPortrait": null,
+     "text": "What, how did they do that?",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "They seem to be using some sort of cloaking device, stay alert!",
+     "time": 5,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 9,
+   "scoreCap": 10,
+   "mode": "Elimination",
+   "modeCode": "elim",
+   "teams": 2,
+   "map": "desert",
+   "overallDiff": 7,
+   "playerSkin": "raze",
+   "music": "M_Rose",
+   "title": "Strange Encounter",
+   "desc": "We've lost communications with the Ship Yards and we fear the worst... Your team is currently busy on other assignments, so you'll have to check it out alone.",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": null,
+    "postFrames": null
+   },
+   "bots": [
+    {
+     "name": "Commander",
+     "team": 2,
+     "skin": "acommander",
+     "level": 6,
+     "weapon": "commander",
+     "ability": "teleport",
+     "equip": "commander"
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Greetings human.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "What, surprised I speak your language?",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "We know what you're planning with the artifacts.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "We will not stop until they are in our posession.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Earth will be destroyed, we will prevail.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Hah hah hah. You're wasting your time human.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Surrender now, there is no chance for your race.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Silence? Your race usually can not stop speaking.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "This is pointless.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "You Will Fail.",
+     "time": null,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 10,
+   "scoreCap": 150,
+   "mode": "Domination",
+   "modeCode": "dom",
+   "teams": 2,
+   "map": "mines",
+   "overallDiff": 5,
+   "playerSkin": "raze",
+   "music": "M_Necro",
+   "title": "Trapped",
+   "desc": "Go to the mines to place the first artifact. There’s too many zombies in the area, so you’ll need to place the artifact while you fight. Your team is still busy on another assignment, but will soon come to assist you.",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": "[16]",
+    "postSong": null,
+    "postFrames": "[15]"
+   },
+   "bots": [
+    {
+     "name": "J. Rockit",
+     "team": 1,
+     "skin": "rambo",
+     "level": 9,
+     "weapon": "johnny",
+     "ability": "sword",
+     "equip": "johnny",
+     "extra": {
+      "noSpawn": true
+     }
+    },
+    {
+     "name": "Md. Sage",
+     "team": 1,
+     "skin": "soldier",
+     "level": 6,
+     "weapon": "medic",
+     "ability": "heal",
+     "equip": "medic",
+     "extra": {
+      "noSpawn": true
+     }
+    },
+    {
+     "name": "Ex. Treem",
+     "team": 1,
+     "skin": "soldier2",
+     "level": 6,
+     "weapon": "explosives",
+     "ability": "grenade",
+     "equip": "explosives",
+     "extra": {
+      "noSpawn": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zurban",
+     "level": 3,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie"
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zbeach",
+     "level": 3,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie"
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zelderly",
+     "level": 3,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie"
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zbiker",
+     "level": 3,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie"
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 4,
+     "whoPortrait": null,
+     "text": "Braaiinnns...",
+     "time": 4,
+     "speaker": null
+    },
+    {
+     "whoUnit": 5,
+     "whoPortrait": null,
+     "text": "Brraaiins?",
+     "time": 4,
+     "speaker": null
+    },
+    {
+     "whoUnit": 6,
+     "whoPortrait": null,
+     "text": "Braaiinnns!",
+     "time": 4,
+     "speaker": null
+    },
+    {
+     "whoUnit": 4,
+     "whoPortrait": null,
+     "text": "... Aaarrtifaacct...",
+     "time": 4,
+     "speaker": null
+    },
+    {
+     "whoUnit": 5,
+     "whoPortrait": null,
+     "text": "Aarrtifact...",
+     "time": 4,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Sorry we're late. Did ya miss us?",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 3,
+     "whoPortrait": null,
+     "text": "Woo, let's light 'em up!",
+     "time": 5,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 11,
+   "scoreCap": 10,
+   "mode": "Elimination",
+   "modeCode": "elim",
+   "teams": 2,
+   "map": "ocean2",
+   "overallDiff": 6,
+   "playerSkin": "raze",
+   "music": "M_Theloop",
+   "title": "Disposal",
+   "desc": "One of the artifacts was already placed and activated in the underwater lab but it's now being attacked. Wipe out all enemies in the lab!",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": "[26]",
+    "postSong": null,
+    "postFrames": "[23]"
+   },
+   "bots": [
+    {
+     "name": "J. Rockit",
+     "team": 1,
+     "skin": "rambo",
+     "level": 9,
+     "weapon": "johnny",
+     "ability": "sword",
+     "equip": "johnny"
+    },
+    {
+     "name": "Md. Sage",
+     "team": 1,
+     "skin": "soldier",
+     "level": 6,
+     "weapon": "medic",
+     "ability": "heal",
+     "equip": "medic"
+    },
+    {
+     "name": "Security Bot",
+     "team": 1,
+     "skin": "bsnow",
+     "level": 5,
+     "weapon": "robot",
+     "ability": "static",
+     "equip": "robot"
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "amarine",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "mine",
+     "equip": "alien"
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "amarine",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "mine",
+     "equip": "alien"
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "amarine",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "mine",
+     "equip": "alien"
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zbeach",
+     "level": 5,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie"
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": null,
+     "whoPortrait": "soldier2",
+     "text": "Sorry, I won't be joining you guys...",
+     "time": 5,
+     "speaker": "Ex. "
+    },
+    {
+     "whoUnit": null,
+     "whoPortrait": "soldier2",
+     "text": "Water really gives me the creeps...",
+     "time": 4,
+     "speaker": "Ex. "
+    },
+    {
+     "whoUnit": 3,
+     "whoPortrait": null,
+     "text": "Worry not. My assistance will be given instead.",
+     "time": 5,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 12,
+   "scoreCap": 5,
+   "mode": "Capture the Flag",
+   "modeCode": "ctf",
+   "teams": 2,
+   "map": "mines2",
+   "overallDiff": 6,
+   "playerSkin": "raze",
+   "music": "M_Rocket",
+   "title": "Reclaimed",
+   "desc": "Aliens have discovered the location of our first artifact and are removing it. Head back to the mines and steal it back at all costs. You will receive help from the mine security bots.",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": null,
+    "postFrames": null
+   },
+   "bots": [
+    {
+     "name": "J. Rockit",
+     "team": 1,
+     "skin": "rambo",
+     "level": 9,
+     "weapon": "johnny",
+     "ability": "sword",
+     "equip": "johnny"
+    },
+    {
+     "name": "Md. Sage",
+     "team": 1,
+     "skin": "soldier",
+     "level": 6,
+     "weapon": "medic",
+     "ability": "heal",
+     "equip": "medic"
+    },
+    {
+     "name": "Ex. Treem",
+     "team": 1,
+     "skin": "soldier2",
+     "level": 6,
+     "weapon": "explosives",
+     "ability": "grenade",
+     "equip": "explosives"
+    },
+    {
+     "name": "Security Bot",
+     "team": 1,
+     "skin": "bmine",
+     "level": 5,
+     "weapon": "robot",
+     "ability": "static",
+     "equip": "robot"
+    },
+    {
+     "name": "Security Bot",
+     "team": 1,
+     "skin": "bmine",
+     "level": 5,
+     "weapon": "robot",
+     "ability": "static",
+     "equip": "robot"
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "ajungle",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "mine",
+     "equip": "alien"
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "ajungle",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "mine",
+     "equip": "alien"
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "ajungle",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "mine",
+     "equip": "alien"
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "ajungle",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien"
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "ajungle",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien"
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "ajungle",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien"
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Alright guys, plain and simple. You know what to do.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 3,
+     "whoPortrait": null,
+     "text": "Tear 'em up!",
+     "time": 5,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 13,
+   "scoreCap": 30,
+   "mode": "Deathmatch",
+   "modeCode": "dm",
+   "teams": 2,
+   "map": "snow2",
+   "overallDiff": 6,
+   "playerSkin": "raze",
+   "music": "M_Ricochet",
+   "title": "Mutation",
+   "desc": "Place the 3rd artifact. The virus is starting to take effect, you can feel something changing inside you...",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": "[27]",
+    "postSong": null,
+    "postFrames": "[24]"
+   },
+   "bots": [
+    {
+     "name": "J. Rockit",
+     "team": 1,
+     "skin": "rambo",
+     "level": 9,
+     "weapon": "johnny",
+     "ability": "sword",
+     "equip": "johnny",
+     "extra": {
+      "lives": 2
+     }
+    },
+    {
+     "name": "Md. Sage",
+     "team": 1,
+     "skin": "soldier",
+     "level": 6,
+     "weapon": "medic",
+     "ability": "heal",
+     "equip": "medic",
+     "extra": {
+      "lives": 2
+     }
+    },
+    {
+     "name": "Ex. Treem",
+     "team": 1,
+     "skin": "soldier2",
+     "level": 6,
+     "weapon": "explosives",
+     "ability": "grenade",
+     "equip": "explosives",
+     "extra": {
+      "lives": 2
+     }
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "asnow",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "mine",
+     "equip": "alien"
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "asnow",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien"
+    },
+    {
+     "name": "Alien",
+     "team": 2,
+     "skin": "asnow",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien"
+    },
+    {
+     "name": "Commander",
+     "team": 2,
+     "skin": "acommander",
+     "level": 7,
+     "weapon": "commander",
+     "ability": "teleport",
+     "equip": "commander",
+     "extra": {
+      "lives": 6
+     }
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Whoa what, this thing is teleporting all over the place!",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 2,
+     "whoPortrait": null,
+     "text": "I can't hit him, he's like a monkey on sugar!",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 3,
+     "whoPortrait": null,
+     "text": "Heh, explosives always seem to do the trick.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Right, explosives or strong weapons should take him down easily!",
+     "time": 6,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 14,
+   "scoreCap": 10,
+   "mode": "Elimination",
+   "modeCode": "elim",
+   "teams": 2,
+   "map": "jungle3",
+   "overallDiff": 7,
+   "playerSkin": "mutate",
+   "music": "M_Rose",
+   "title": "Final Deployment",
+   "desc": "The final artifact is ready to be placed. Defeat the enemy with only minutes until the meteor shower hits. You have fully mutated into a Zombie, but the survival of the human race lies within your hands.",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": "[28]",
+    "postSong": "M_Warhead",
+    "postFrames": "[25,21,19,22]"
+   },
+   "bots": [
+    {
+     "name": "J. Rockit",
+     "team": 1,
+     "skin": "rambo",
+     "level": 9,
+     "weapon": "johnny",
+     "ability": "sword",
+     "equip": "johnny",
+     "extra": {
+      "lives": 2
+     }
+    },
+    {
+     "name": "Md. Sage",
+     "team": 1,
+     "skin": "soldier",
+     "level": 6,
+     "weapon": "medic",
+     "ability": "heal",
+     "equip": "medic",
+     "extra": {
+      "lives": 2
+     }
+    },
+    {
+     "name": "Ex. Treem",
+     "team": 1,
+     "skin": "soldier2",
+     "level": 6,
+     "weapon": "explosives",
+     "ability": "grenade",
+     "equip": "explosives",
+     "extra": {
+      "lives": 2
+     }
+    },
+    {
+     "name": "Commander",
+     "team": 2,
+     "skin": "acommander",
+     "level": 6,
+     "weapon": "commander",
+     "ability": "teleport",
+     "equip": "commander",
+     "extra": {
+      "lives": 6
+     }
+    },
+    {
+     "name": "Commander",
+     "team": 2,
+     "skin": "acommander",
+     "level": 6,
+     "weapon": "commander",
+     "ability": "teleport",
+     "equip": "commander",
+     "extra": {
+      "lives": 6
+     }
+    },
+    {
+     "name": "Commander",
+     "team": 2,
+     "skin": "acommander",
+     "level": 6,
+     "weapon": "commander",
+     "ability": "teleport",
+     "equip": "commander",
+     "extra": {
+      "lives": 6
+     }
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "This is our last shot, we need to kill them before the Meteors hit.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "If we can't activate the last artifact in time, earth is doomed...",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "We have exactly 4 minutes before it's too late... We can do this!",
+     "time": 7,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Before I die... Kill them, please... Kill them all...",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 2,
+     "whoPortrait": null,
+     "text": "I've.. learned so much... Thankyou...",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 3,
+     "whoPortrait": null,
+     "text": "Eugh, it's... been an honor fighting by your side...",
+     "time": 5,
+     "speaker": null
+    }
+   ]
+  }
+ ],
+ "alien": [
+  {
+   "stage": 0,
+   "scoreCap": 15,
+   "mode": "Deathmatch",
+   "modeCode": "dm",
+   "teams": 2,
+   "map": "space2",
+   "overallDiff": 5,
+   "playerSkin": "acommander",
+   "music": "M_Rocket",
+   "title": "Misscommunication",
+   "desc": "A human ship has been spotted near our artifact transport ship. Remove all human threats, as the artifacts must travel safely back to our home planet.",
+   "cutscene": {
+    "preSong": "M_Theloop",
+    "preFrames": "[7,31]",
+    "postSong": null,
+    "postFrames": "[40]"
+   },
+   "bots": [
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "aspace",
+     "level": 6,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien",
+     "raw": [
+      "\"x\"",
+      "800",
+      "\"y\""
+     ],
+     "extra": {
+      "x": 800,
+      "y": null
+     }
+    },
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "aspace",
+     "level": 6,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien",
+     "raw": [
+      "\"x\"",
+      "2000",
+      "\"y\""
+     ],
+     "extra": {
+      "x": 2000,
+      "y": null
+     }
+    },
+    {
+     "name": "Captain",
+     "team": 2,
+     "skin": "raze2",
+     "level": 7,
+     "weapon": "johnny",
+     "ability": "grenade",
+     "equip": "johnny"
+    },
+    {
+     "name": "Transport Bot",
+     "team": 2,
+     "skin": "bspace",
+     "level": 6,
+     "weapon": "robot",
+     "ability": "static",
+     "equip": "robot"
+    },
+    {
+     "name": "Transport Bot",
+     "team": 2,
+     "skin": "bspace",
+     "level": 6,
+     "weapon": "robot",
+     "ability": "static",
+     "equip": "robot"
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "This human must die.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "We can't allow him to notify his people about our attack.",
+     "time": 6,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Human reinforcements is the last thing we need.",
+     "time": 6,
+     "speaker": null
+    },
+    {
+     "whoUnit": 4,
+     "whoPortrait": null,
+     "text": "Target acquired.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Fight past the machines, defend the artifact with your life!",
+     "time": 6,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Their defenses are too strong. We are underequipped!",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "No, fight as a team, and we will prevail!",
+     "time": null,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 1,
+   "scoreCap": 150,
+   "mode": "Domination",
+   "modeCode": "dom",
+   "teams": 2,
+   "map": "space",
+   "overallDiff": 5,
+   "playerSkin": "acommander",
+   "music": "M_Theloop",
+   "title": "Search Party",
+   "desc": "The artifacts are no longer in our ship, search the surrounding wreckage for them.",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": null,
+    "postFrames": null
+   },
+   "bots": [
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "aspace",
+     "level": 6,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien"
+    },
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "aspace",
+     "level": 6,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien"
+    },
+    {
+     "name": "Transport Bot",
+     "team": 2,
+     "skin": "bspace",
+     "level": 6,
+     "weapon": "robot",
+     "ability": "static",
+     "equip": "robot"
+    },
+    {
+     "name": "Transport Bot",
+     "team": 2,
+     "skin": "bspace",
+     "level": 6,
+     "weapon": "robot",
+     "ability": "static",
+     "equip": "robot"
+    },
+    {
+     "name": "Transport Bot",
+     "team": 2,
+     "skin": "bspace",
+     "level": 6,
+     "weapon": "robot",
+     "ability": "static",
+     "equip": "robot"
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Those artifacts are a top priority. Search every corner.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 3,
+     "whoPortrait": null,
+     "text": "Intruder Alert.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "These bots are nothing but scrap metal. Kill them and keep searching!",
+     "time": 6,
+     "speaker": null
+    },
+    {
+     "whoUnit": 3,
+     "whoPortrait": null,
+     "text": "Identify systems malfunction.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 3,
+     "whoPortrait": null,
+     "text": "Targeting systems malfunction.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 3,
+     "whoPortrait": null,
+     "text": "Rebooting all Transport Bots...",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Here's our chance to search uninterrupted!",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 3,
+     "whoPortrait": null,
+     "text": "Reboot status: 50%",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 3,
+     "whoPortrait": null,
+     "text": "Reboot status: 75%",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 3,
+     "whoPortrait": null,
+     "text": "Reboot Complete. All systems 100%.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 3,
+     "whoPortrait": null,
+     "text": "Identifaction database not found.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 3,
+     "whoPortrait": null,
+     "text": "Defaulting all personel to 'Intruder' status.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Great, that should slow down anyone that comes after us.",
+     "time": 6,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 2,
+   "scoreCap": 20,
+   "mode": "Deathmatch",
+   "modeCode": "dm",
+   "teams": 2,
+   "map": "tutq2",
+   "overallDiff": 6,
+   "playerSkin": "acommander",
+   "music": null,
+   "title": "Invasion",
+   "desc": "The artifacts can not be found... The human must have taken them. Our first plan of action is to destroy their main combat facility.",
+   "cutscene": {
+    "preSong": "M_Rose",
+    "preFrames": "[29,30]",
+    "postSong": null,
+    "postFrames": null
+   },
+   "bots": [
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "aspace",
+     "level": 6,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien",
+     "extra": {
+      "spawn": {
+       "x": 2475,
+       "y": 1090,
+       "node": "o"
+      }
+     }
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "rambo",
+     "level": 6,
+     "weapon": "johnny",
+     "ability": "sword",
+     "equip": "johnny"
+    },
+    {
+     "name": "Raze Soldier",
+     "team": 2,
+     "skin": "raze",
+     "level": 6,
+     "weapon": "raze",
+     "ability": "ammo",
+     "equip": "raze"
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Oh no!",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "What is it commander?",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "It's the one they call... 'Raze'",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "In our first invasion attempt, we fought an elite group.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "We killed them all off except this one.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "This man single handedly defeated us...",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Not this time. The artifacts will be ours once again!",
+     "time": 5,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 3,
+   "scoreCap": 10,
+   "mode": "Elimination",
+   "modeCode": "elim",
+   "teams": 3,
+   "map": "city",
+   "overallDiff": 5,
+   "playerSkin": "acommander",
+   "music": "M_Ricochet",
+   "title": "Epidemic",
+   "desc": "We’ve located the escape pod from the survivor on that ship, it's in the infected city. We must find him and retrieve the artifacts before the humans do!",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": null,
+    "postFrames": null
+   },
+   "bots": [
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "aspace",
+     "level": 8,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien"
+    },
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "aspace",
+     "level": 8,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien"
+    },
+    {
+     "name": "Human",
+     "team": 3,
+     "skin": "mine",
+     "level": 10,
+     "weapon": "johnny",
+     "ability": "sword",
+     "equip": "johnny",
+     "extra": {
+      "startWeap": 5
+     }
+    },
+    {
+     "name": "Survivor",
+     "team": 3,
+     "skin": "raze3",
+     "level": 7,
+     "weapon": "raze",
+     "ability": "none",
+     "equip": "raze"
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zurban",
+     "level": 6,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "lives": 3,
+      "dblFire": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zbeach",
+     "level": 6,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "lives": 3,
+      "dblFire": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zelderly",
+     "level": 6,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "lives": 3,
+      "dblFire": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zbiker",
+     "level": 6,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "lives": 3,
+      "dblFire": true
+     }
+    },
+    {
+     "name": "Zombie",
+     "team": 2,
+     "skin": "zbiker2",
+     "level": 6,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie",
+     "extra": {
+      "lives": 3,
+      "dblFire": true
+     }
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Stay sharp. We must capture the survivor.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "I don't understand... Was it not our species who created this virus?",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Why are they attacking us.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 5,
+     "whoPortrait": null,
+     "text": "Alllliiiennnn braaaaiinnnnnnnnnnsssssss",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "We haven't paid earth a visit in many years. The infected now follow no one.",
+     "time": 7,
+     "speaker": null
+    },
+    {
+     "whoUnit": 6,
+     "whoPortrait": null,
+     "text": "BRAIIIINS",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "The intelectual level of these creatures is... embarrising... to say the least.",
+     "time": 8,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Enough! Capture the survivor and secure the artifacts!",
+     "time": 5,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 4,
+   "scoreCap": 15,
+   "mode": "Juggernaught",
+   "modeCode": "jug",
+   "teams": 0,
+   "map": "mines",
+   "overallDiff": 5,
+   "playerSkin": "acommander",
+   "music": "M_Necro",
+   "title": "Discipline",
+   "desc": "The humans have escaped with the survivor and artifacts. Zombies are no longer allied with us, so head over to the thickest zombie infestation in attempt to gain their loyalty. You'll have to do this alone.",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": null,
+    "postFrames": null
+   },
+   "bots": [
+    {
+     "name": "Zombie",
+     "team": 0,
+     "skin": "zurban",
+     "level": 6,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie"
+    },
+    {
+     "name": "Zombie",
+     "team": 0,
+     "skin": "zbeach",
+     "level": 6,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie"
+    },
+    {
+     "name": "Zombie",
+     "team": 0,
+     "skin": "zelderly",
+     "level": 6,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie"
+    },
+    {
+     "name": "Zombie",
+     "team": 0,
+     "skin": "zbiker",
+     "level": 6,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie"
+    },
+    {
+     "name": "Zombie",
+     "team": 0,
+     "skin": "zbiker2",
+     "level": 6,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie"
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": null,
+     "whoPortrait": "aspace",
+     "text": "Commander, we've supplied you with a highly delicious brain.",
+     "time": 5,
+     "speaker": "Alien"
+    },
+    {
+     "whoUnit": null,
+     "whoPortrait": "aspace",
+     "text": "The zombies will all be fighting for it.",
+     "time": 5,
+     "speaker": "Alien"
+    },
+    {
+     "whoUnit": null,
+     "whoPortrait": "aspace",
+     "text": "You need to take the brain, and kill them all.",
+     "time": 5,
+     "speaker": "Alien"
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "What?",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": null,
+     "whoPortrait": "aspace",
+     "text": "This will show your dominence over them.",
+     "time": 5,
+     "speaker": "Alien"
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Right, will do.",
+     "time": null,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 5,
+   "scoreCap": 9,
+   "mode": "Elimination",
+   "modeCode": "elim",
+   "teams": 3,
+   "map": "ocean",
+   "overallDiff": 6,
+   "playerSkin": "acommander",
+   "music": "M_Theloop",
+   "title": "Breaking Point",
+   "desc": "We've finally trained the undead to fight along side our soldiers. Our tracking on the artifacts is now working, and we've located them at an underwater facility.",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": null,
+    "postFrames": null
+   },
+   "bots": [
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "aspace",
+     "level": 8,
+     "weapon": "alien",
+     "ability": "static",
+     "equip": "alien"
+    },
+    {
+     "name": "Zombie",
+     "team": 1,
+     "skin": "zbeach",
+     "level": 5,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie"
+    },
+    {
+     "name": "Zombie",
+     "team": 1,
+     "skin": "zbeach",
+     "level": 5,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie"
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "mine",
+     "level": 7,
+     "weapon": "johnny",
+     "ability": "grenade",
+     "equip": "johnny"
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "mine",
+     "level": 7,
+     "weapon": "johnny",
+     "ability": "grenade",
+     "equip": "raze"
+    },
+    {
+     "name": "Security Bot",
+     "team": 2,
+     "skin": "bsnow",
+     "level": 8,
+     "weapon": "robot",
+     "ability": "mine",
+     "equip": "robot"
+    },
+    {
+     "name": "Security Bot",
+     "team": 2,
+     "skin": "bsnow",
+     "level": 8,
+     "weapon": "robot",
+     "ability": "mine",
+     "equip": "robot"
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Watch your step commrads. The security bots are leaving land mines everywhere.",
+     "time": 6,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Well well well... Look what I have found.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": null,
+     "whoPortrait": "addison",
+     "text": "Leave me alone... I... I don't know anything!",
+     "time": 6,
+     "speaker": "Scientist"
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Leave him!",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "A war is not what we want. Our only focus is the artifacts.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "That human has no use to us. Let him go.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": null,
+     "whoPortrait": "addison",
+     "text": "Ugh... What... They're letting me go?",
+     "time": 6,
+     "speaker": "Scientist"
+    }
+   ]
+  },
+  {
+   "stage": 6,
+   "scoreCap": 25,
+   "mode": "Deathmatch",
+   "modeCode": "dm",
+   "teams": 2,
+   "map": "desert2",
+   "overallDiff": 6,
+   "playerSkin": "acommander",
+   "music": "M_Rocket",
+   "title": "A Strong Defense",
+   "desc": "In an attempt to build our offenses on Earth we’ve began ship production on various locations. However it appears the humans have found us out. We’re equipping everyone on the team with Acid hounds, so be careful where you fire.",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": null,
+    "postFrames": null
+   },
+   "bots": [
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "aspace",
+     "level": 7,
+     "weapon": "alien",
+     "ability": "grenade",
+     "equip": "alien",
+     "extra": {
+      "startWeap": 6
+     }
+    },
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "aspace",
+     "level": 7,
+     "weapon": "alien",
+     "ability": "grenade",
+     "equip": "alien",
+     "extra": {
+      "startWeap": 6
+     }
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "rambo",
+     "level": 7,
+     "weapon": "johnny",
+     "ability": "sword",
+     "equip": "johnny"
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "soldier",
+     "level": 7,
+     "weapon": "medic",
+     "ability": "heal",
+     "equip": "medic"
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "soldier2",
+     "level": 7,
+     "weapon": "explosives",
+     "ability": "grenade",
+     "equip": "explosives"
+    },
+    {
+     "name": "Raze Soldier",
+     "team": 2,
+     "skin": "raze",
+     "level": 9,
+     "weapon": "raze",
+     "ability": "static",
+     "equip": "raze"
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "We must defend our ships at all cost!",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "The one they call 'Raze'... He's back. Was he not killed?",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Commander, we can't kill him. No matter what we do, he always escapes...",
+     "time": 6,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Hmph, impressive...",
+     "time": null,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 7,
+   "scoreCap": 10,
+   "mode": "Capture the Flag",
+   "modeCode": "ctf",
+   "teams": 2,
+   "map": "mines",
+   "overallDiff": 6,
+   "playerSkin": "acommander",
+   "music": "M_Necro",
+   "title": "Underestimated",
+   "desc": "The humans are attempting to place one of the artifacts. Stop them at all costs!",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": null,
+    "postFrames": "[37]"
+   },
+   "bots": [
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "aspace",
+     "level": 8,
+     "weapon": "alien",
+     "ability": "grenade",
+     "equip": "alien"
+    },
+    {
+     "name": "Zombie",
+     "team": 1,
+     "skin": "zurban",
+     "level": 6,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie"
+    },
+    {
+     "name": "Zombie",
+     "team": 1,
+     "skin": "zbiker",
+     "level": 6,
+     "weapon": "zombie",
+     "ability": "none",
+     "equip": "zombie"
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "rambo",
+     "level": 9,
+     "weapon": "johnny",
+     "ability": "sword",
+     "equip": "johnny"
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "soldier",
+     "level": 8,
+     "weapon": "medic",
+     "ability": "heal",
+     "equip": "medic"
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "soldier2",
+     "level": 8,
+     "weapon": "explosives",
+     "ability": "grenade",
+     "equip": "explosives"
+    },
+    {
+     "name": "Raze Soldier",
+     "team": 2,
+     "skin": "raze",
+     "level": 10,
+     "weapon": "raze",
+     "ability": "static",
+     "equip": "raze"
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "The humans are placing the first artifact. We must stop them!",
+     "time": 6,
+     "speaker": null
+    },
+    {
+     "whoUnit": 2,
+     "whoPortrait": null,
+     "text": "Arrrttiifffaccctt..",
+     "time": 6,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 8,
+   "scoreCap": 25,
+   "mode": "Deathmatch",
+   "modeCode": "dm",
+   "teams": 2,
+   "map": "snow",
+   "overallDiff": 6,
+   "playerSkin": "acommander",
+   "music": "M_Theloop",
+   "title": "The Ambush",
+   "desc": "We've failed to retrieve the artifact from the mines. Use your cloaking to ambush their facility in the north. If we destroy it, it might distrupt their communications. ",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": null,
+    "postFrames": null
+   },
+   "bots": [
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "asnow",
+     "level": 8,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien",
+     "extra": {
+      "permInvis": true
+     }
+    },
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "asnow",
+     "level": 8,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien",
+     "extra": {
+      "permInvis": true
+     }
+    },
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "asnow",
+     "level": 8,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien",
+     "extra": {
+      "permInvis": true
+     }
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "rambo",
+     "level": 9,
+     "weapon": "johnny",
+     "ability": "sword",
+     "equip": "johnny"
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "soldier",
+     "level": 8,
+     "weapon": "medic",
+     "ability": "heal",
+     "equip": "medic"
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "soldier2",
+     "level": 8,
+     "weapon": "explosives",
+     "ability": "grenade",
+     "equip": "explosives"
+    },
+    {
+     "name": "Raze Soldier",
+     "team": 2,
+     "skin": "raze",
+     "level": 9,
+     "weapon": "raze",
+     "ability": "static",
+     "equip": "raze"
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Alright men, get into position.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "The humans are here, get equipped and be ready to strike...",
+     "time": 7,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Ready...",
+     "time": 4,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Attack!",
+     "time": 5,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 9,
+   "scoreCap": 10,
+   "mode": "Elimination",
+   "modeCode": "elim",
+   "teams": 2,
+   "map": "desert",
+   "overallDiff": 9,
+   "playerSkin": "acommander",
+   "music": "M_Rose",
+   "title": "Tormented",
+   "desc": "We’ve developed a new technology that allows us to teleport around the field during battle. We purposely sent out a distress call to lure the humans to the shipyards.",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": null,
+    "postFrames": null
+   },
+   "bots": [
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "raze",
+     "level": 10,
+     "weapon": "raze",
+     "ability": "static",
+     "equip": "raze2"
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Greetings human.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "What, surprised I speak your language?",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "We know what you're planning with the artifacts.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "We will not stop until they are in our posession.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Earth will be destroyed, we will prevail.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Hah hah hah. You're wasting your time human.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Surrender now, there is no chance for your race.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Silence? Your race usually can not stop speaking.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "This is pointless.",
+     "time": null,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "You Will Fail.",
+     "time": null,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 10,
+   "scoreCap": 10,
+   "mode": "Capture the Flag",
+   "modeCode": "ctf",
+   "teams": 2,
+   "map": "ocean",
+   "overallDiff": 7,
+   "playerSkin": "acommander",
+   "music": "M_Theloop",
+   "title": "Artifact Retrieval 101",
+   "desc": "The humans are placing th 2nd artifact in their underwater facility! Steal the artifact and bring it back to us.",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": null,
+    "postFrames": "[38]"
+   },
+   "bots": [
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "asnow",
+     "level": 6,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien"
+    },
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "asnow",
+     "level": 6,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien"
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "rambo",
+     "level": 9,
+     "weapon": "johnny",
+     "ability": "sword",
+     "equip": "johnny"
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "soldier",
+     "level": 8,
+     "weapon": "medic",
+     "ability": "heal",
+     "equip": "medic"
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "soldier2",
+     "level": 8,
+     "weapon": "explosives",
+     "ability": "grenade",
+     "equip": "explosives"
+    },
+    {
+     "name": "Raze Soldier",
+     "team": 2,
+     "skin": "raze",
+     "level": 10,
+     "weapon": "raze",
+     "ability": "static",
+     "equip": "raze"
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Commander, we're outnumbered!",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Right, so you'll need to be strategic.",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Find the fastest and safest route, and stick to it!",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Yes commander!",
+     "time": null,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 11,
+   "scoreCap": 25,
+   "mode": "Deathmatch",
+   "modeCode": "dm",
+   "teams": 2,
+   "map": "jungle2",
+   "overallDiff": 7,
+   "playerSkin": "acommander",
+   "music": "M_Necro",
+   "title": "Taking out the Trash",
+   "desc": "The humans have been using one of their domes as a training grounds for soldiers. Eliminate the soldiers to ensure their army does not grow any stronger.",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": null,
+    "postFrames": null
+   },
+   "bots": [
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "aspace",
+     "level": 6,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien"
+    },
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "aspace",
+     "level": 6,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien"
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "camo",
+     "level": 8,
+     "weapon": "johnny",
+     "ability": "sword",
+     "equip": "johnny"
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "camo",
+     "level": 8,
+     "weapon": "medic",
+     "ability": "heal",
+     "equip": "medic"
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "camo",
+     "level": 8,
+     "weapon": "explosives",
+     "ability": "grenade",
+     "equip": "explosives"
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "camo",
+     "level": 8,
+     "weapon": "raze",
+     "ability": "mine",
+     "equip": "raze"
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "I thought these were supposed to be new recruits!",
+     "time": 6,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Looks like they've been training hard...",
+     "time": 6,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Wipe 'em out.",
+     "time": 5,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 12,
+   "scoreCap": 200,
+   "mode": "Domination",
+   "modeCode": "dom",
+   "teams": 2,
+   "map": "space",
+   "overallDiff": 8,
+   "playerSkin": "acommander",
+   "music": "M_Ricochet",
+   "title": "The Pickup",
+   "desc": "We've received word that the carrier ship we shot down was carrying a very powerful weapon called \"Frozen Death\". Go secure the weapon. Wipe out any resistance you encouner.",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": "M_Throwdown",
+    "postFrames": "[42]"
+   },
+   "bots": [
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "aspace",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien"
+    },
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "aspace",
+     "level": 5,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien"
+    },
+    {
+     "name": "Security Bot",
+     "team": 2,
+     "skin": "bsnow",
+     "level": 9,
+     "weapon": "robot2",
+     "ability": "static",
+     "equip": "robot2"
+    },
+    {
+     "name": "Security Bot",
+     "team": 2,
+     "skin": "bsnow",
+     "level": 9,
+     "weapon": "robot2",
+     "ability": "static",
+     "equip": "robot2"
+    },
+    {
+     "name": "Security Bot",
+     "team": 2,
+     "skin": "bsnow",
+     "level": 9,
+     "weapon": "robot2",
+     "ability": "static",
+     "equip": "robot2"
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Just like last time, search all corners of this ship!",
+     "time": 6,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "We need to find that weapon.",
+     "time": 6,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 13,
+   "scoreCap": 30,
+   "mode": "Deathmatch",
+   "modeCode": "dm",
+   "teams": 2,
+   "map": "snow2",
+   "overallDiff": 8,
+   "playerSkin": "acommander",
+   "music": "M_Rocket",
+   "title": "Rocket Race",
+   "desc": "The humans have placed 2 of the 4 artifacts, and are about to place the third. Use the recovered weapon \"Frozen Death\" to kill them before they can place the artifact.",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": null,
+    "postFrames": "[39]"
+   },
+   "bots": [
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "asnow",
+     "level": 7,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien",
+     "extra": {
+      "startWeap": 6
+     }
+    },
+    {
+     "name": "Alien",
+     "team": 1,
+     "skin": "asnow",
+     "level": 7,
+     "weapon": "alien",
+     "ability": "cloak",
+     "equip": "alien",
+     "extra": {
+      "startWeap": 6
+     }
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "rambo",
+     "level": 9,
+     "weapon": "johnny",
+     "ability": "sword",
+     "equip": "johnny",
+     "extra": {
+      "startWeap": 6
+     }
+    },
+    {
+     "name": "Raze Soldier",
+     "team": 2,
+     "skin": "raze",
+     "level": 10,
+     "weapon": "raze2",
+     "ability": "static",
+     "equip": "raze2",
+     "extra": {
+      "startWeap": 6
+     }
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Now to try this thing out...",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Commander, that weapon... it's incredible!",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 1,
+     "whoPortrait": null,
+     "text": "Would be excellent in other battles!",
+     "time": 5,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Seems like it only works in this cold weather.",
+     "time": 6,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "I don't think I can take it on our next mission.",
+     "time": 6,
+     "speaker": null
+    }
+   ]
+  },
+  {
+   "stage": 14,
+   "scoreCap": 10,
+   "mode": "Elimination",
+   "modeCode": "elim",
+   "teams": 2,
+   "map": "jungle3",
+   "overallDiff": 9,
+   "playerSkin": "acommander",
+   "music": "M_Rose",
+   "title": "A Soldiers Demise",
+   "desc": "The Humans are placing the final artifact and the meteors are imminent. I'm afraid it's too late for our planet... Take 2 other Commanders, we must do what we can.",
+   "cutscene": {
+    "preSong": null,
+    "preFrames": null,
+    "postSong": "M_Infernal",
+    "postFrames": "[32,33,34,36,35,41]"
+   },
+   "bots": [
+    {
+     "name": "Commander",
+     "team": 1,
+     "skin": "acommander",
+     "level": 6,
+     "weapon": "commander",
+     "ability": "teleport",
+     "equip": "commander"
+    },
+    {
+     "name": "Commander",
+     "team": 1,
+     "skin": "acommander",
+     "level": 6,
+     "weapon": "commander",
+     "ability": "teleport",
+     "equip": "commander"
+    },
+    {
+     "name": "Raze Soldier",
+     "team": 2,
+     "skin": "mutate",
+     "level": 10,
+     "weapon": "raze3",
+     "ability": "static",
+     "equip": "raze3",
+     "extra": {
+      "lives": 10,
+      "startWeap": 6
+     }
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "rambo",
+     "level": 9,
+     "weapon": "johnny",
+     "ability": "sword",
+     "equip": "johnny",
+     "extra": {
+      "lives": 5,
+      "startWeap": 3
+     }
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "soldier",
+     "level": 9,
+     "weapon": "medic",
+     "ability": "heal",
+     "equip": "medic",
+     "extra": {
+      "lives": 5,
+      "startWeap": 4
+     }
+    },
+    {
+     "name": "Human",
+     "team": 2,
+     "skin": "soldier2",
+     "level": 9,
+     "weapon": "explosives",
+     "ability": "grenade",
+     "equip": "explosives",
+     "extra": {
+      "lives": 5,
+      "startWeap": 5
+     }
+    }
+   ],
+   "messages": [
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "This is it, fellow Commanders.",
+     "time": 6,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "The meteors are heading our way... We have only 4 minutes.",
+     "time": 8,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "The one known as 'Raze'... He seems to have mutated into a powerful form.",
+     "time": 7,
+     "speaker": null
+    },
+    {
+     "whoUnit": 0,
+     "whoPortrait": null,
+     "text": "Kill the others first, I want him all to myself.",
+     "time": 7,
+     "speaker": null
+    }
+   ]
+  }
+ ]
+}

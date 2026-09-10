@@ -1,0 +1,170 @@
+[
+ {
+  "cls": 0,
+  "name": "Nothing",
+  "type": "",
+  "value": 0,
+  "cost": 0,
+  "desc": "None"
+ },
+ {
+  "cls": 0,
+  "name": "Flux Capacitor",
+  "type": "shield",
+  "value": 0.8,
+  "cost": 400,
+  "desc": "-20% all damage when you have a shield"
+ },
+ {
+  "cls": 0,
+  "name": "Medipack",
+  "type": "hprecover",
+  "value": 0.2,
+  "cost": 800,
+  "desc": "Quickly regenerate health when under 40%"
+ },
+ {
+  "cls": 0,
+  "name": "Armor Plating",
+  "type": "critdef",
+  "value": 1,
+  "cost": 1200,
+  "desc": "Immune to fire and critical hits to head/butt/crotch"
+ },
+ {
+  "cls": 0,
+  "name": "Combat Armor",
+  "type": "health",
+  "value": 50,
+  "cost": 1600,
+  "desc": "+50% max health"
+ },
+ {
+  "cls": 0,
+  "name": "Adrenaline Boost",
+  "type": "final",
+  "value": 1,
+  "cost": 2000,
+  "desc": "Fatal attacks will reduce you to 1% health"
+ },
+ {
+  "cls": 0,
+  "name": "",
+  "type": "health",
+  "value": 100,
+  "cost": 0,
+  "desc": "6"
+ },
+ {
+  "cls": 0,
+  "name": "",
+  "type": "health",
+  "value": 400,
+  "cost": 0,
+  "desc": "7"
+ },
+ {
+  "cls": 1,
+  "name": "Nothing",
+  "type": "",
+  "value": 0,
+  "cost": 0,
+  "desc": "None"
+ },
+ {
+  "cls": 1,
+  "name": "Point Allocator",
+  "type": "credits",
+  "value": 2,
+  "cost": 600,
+  "desc": "+2 Credits earned per kill"
+ },
+ {
+  "cls": 1,
+  "name": "Pickup Booster",
+  "type": "pcboost",
+  "value": 1.6,
+  "cost": 900,
+  "desc": "+60% health/shield from pickups"
+ },
+ {
+  "cls": 1,
+  "name": "Power Extender",
+  "type": "powerup",
+  "value": 1.4,
+  "cost": 1200,
+  "desc": "+40% powerup duration"
+ },
+ {
+  "cls": 1,
+  "name": "Cooling Packs",
+  "type": "recharge",
+  "value": 1.3,
+  "cost": 1500,
+  "desc": "+30% faster ability recharge"
+ },
+ {
+  "cls": 1,
+  "name": "Shield Battery",
+  "type": "spspawn",
+  "value": 25,
+  "cost": 1800,
+  "desc": "Spawn with 25% Shield"
+ },
+ {
+  "cls": 1,
+  "name": "",
+  "type": "spspawn",
+  "value": 50,
+  "cost": 0,
+  "desc": "6"
+ },
+ {
+  "cls": 2,
+  "name": "Nothing",
+  "type": "",
+  "value": 0,
+  "cost": 0,
+  "desc": "None"
+ },
+ {
+  "cls": 2,
+  "name": "Stabilizer",
+  "type": "recoil",
+  "value": 0.6,
+  "cost": 1000,
+  "desc": "+40% weapon accuracy"
+ },
+ {
+  "cls": 2,
+  "name": "Spiral Chamber",
+  "type": "range",
+  "value": 10,
+  "cost": 1200,
+  "desc": "Weapons fire further"
+ },
+ {
+  "cls": 2,
+  "name": "Target Marker",
+  "type": "critical",
+  "value": 1.2,
+  "cost": 1400,
+  "desc": "+20% damage to heads, crotches, and butts"
+ },
+ {
+  "cls": 2,
+  "name": "Hair Trigger",
+  "type": "rof",
+  "value": 0.8,
+  "cost": 1600,
+  "desc": "+20% weapon fire speed"
+ },
+ {
+  "cls": 2,
+  "name": "Extra Clips",
+  "type": "ammo",
+  "value": 1,
+  "cost": 1800,
+  "desc": "Pick up weapons with full ammo"
+ }
+]

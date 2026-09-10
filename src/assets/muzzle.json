@@ -1,0 +1,146 @@
+{
+ "alienrifle": {
+  "dy": 0.5,
+  "len": 49.2
+ },
+ "arifl2": {
+  "dy": -1.8,
+  "len": 47.2
+ },
+ "arifle": {
+  "dy": -0.4,
+  "len": 52.2
+ },
+ "asniper": {
+  "dy": 2.0,
+  "len": 54.2
+ },
+ "beamer": {
+  "dy": -3.4,
+  "len": 55.2
+ },
+ "blaster": {
+  "dy": 3.4,
+  "len": 40.2
+ },
+ "blood": {
+  "dy": -0.9,
+  "len": 43.2
+ },
+ "burster": {
+  "dy": 0.7,
+  "len": 42.2
+ },
+ "chaingun": {
+  "dy": 11.7,
+  "len": 53.2
+ },
+ "creditsgun": {
+  "dy": -1.7,
+  "len": 53.2
+ },
+ "destroyer": {
+  "dy": 12.0,
+  "len": 59.2
+ },
+ "flamethrower": {
+  "dy": 10.9,
+  "len": 46.2
+ },
+ "hrocket": {
+  "dy": -0.9,
+  "len": 65.2
+ },
+ "hrocket2": {
+  "dy": -6.7,
+  "len": 59.2
+ },
+ "icannon": {
+  "dy": -7.9,
+  "len": 66.2
+ },
+ "icegun": {
+  "dy": -6.0,
+  "len": 63.2
+ },
+ "laserrifle": {
+  "dy": -0.6,
+  "len": 53.2
+ },
+ "magnum": {
+  "dy": -0.8,
+  "len": 45.2
+ },
+ "mauser": {
+  "dy": 0.8,
+  "len": 36.2
+ },
+ "pcanon": {
+  "dy": -6.9,
+  "len": 67.2
+ },
+ "pistol": {
+  "dy": 1.1,
+  "len": 38.2
+ },
+ "plaspistol": {
+  "dy": -0.4,
+  "len": 40.2
+ },
+ "pshotgun": {
+  "dy": -5.9,
+  "len": 66.2
+ },
+ "railgun": {
+  "dy": 0.3,
+  "len": 70.2
+ },
+ "railgun2": {
+  "dy": 1.3,
+  "len": 54.2
+ },
+ "rocket": {
+  "dy": -5.6,
+  "len": 46.2
+ },
+ "sawgun": {
+  "dy": 13.0,
+  "len": 47.2
+ },
+ "shotgun": {
+  "dy": -3.9,
+  "len": 87.2
+ },
+ "sniper": {
+  "dy": -1.1,
+  "len": 72.2
+ },
+ "sniper2": {
+  "dy": 2.3,
+  "len": 68.2
+ },
+ "sparkgun": {
+  "dy": 0.8,
+  "len": 42.2
+ },
+ "spitter": {
+  "dy": 13.4,
+  "len": 40.2
+ },
+ "sticklaunch": {
+  "dy": 3.1,
+  "len": 54.2
+ },
+ "tshotgun": {
+  "dy": -2.9,
+  "len": 57.2
+ },
+ "uzi": {
+  "dy": -0.6,
+  "len": 41.2
+ },
+ "zapper": {
+  "dy": 0.5,
+  "len": 51.2
+ }
+}

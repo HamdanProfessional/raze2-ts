@@ -1,0 +1,548 @@
+{
+  "pistol": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      49,
+      83,
+      38,
+      12
+    ]
+  },
+  "plaspistol": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      49,
+      82,
+      39,
+      13
+    ]
+  },
+  "burster": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      49,
+      83,
+      41,
+      13
+    ]
+  },
+  "mauser": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      49,
+      83,
+      36,
+      12
+    ]
+  },
+  "uzi": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      49,
+      83,
+      40,
+      15
+    ]
+  },
+  "magnum": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      49,
+      83,
+      43,
+      12
+    ]
+  },
+  "sparkgun": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      49,
+      81,
+      41,
+      15
+    ]
+  },
+  "blaster": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      49,
+      83,
+      39,
+      14
+    ]
+  },
+  "blood": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      49,
+      82,
+      42,
+      13
+    ]
+  },
+  "shotgun": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      62,
+      83,
+      81,
+      13
+    ]
+  },
+  "pshotgun": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      59,
+      81,
+      57,
+      15
+    ]
+  },
+  "zapper": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      48,
+      82,
+      50,
+      18
+    ]
+  },
+  "tshotgun": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      52,
+      83,
+      51,
+      16
+    ]
+  },
+  "pcanon": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      60,
+      81,
+      57,
+      14
+    ]
+  },
+  "rifle": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      48,
+      82,
+      51,
+      18
+    ]
+  },
+  "alienrifle": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      48,
+      84,
+      48,
+      16
+    ]
+  },
+  "laserrifle": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      48,
+      82,
+      51,
+      18
+    ]
+  },
+  "icegun": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      47,
+      74,
+      61,
+      22
+    ]
+  },
+  "arifl2": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      48,
+      80,
+      46,
+      20
+    ]
+  },
+  "sniper": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      50,
+      77,
+      66,
+      18
+    ]
+  },
+  "railgun": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      50,
+      79,
+      64,
+      18
+    ]
+  },
+  "asniper": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      53,
+      79,
+      48,
+      17
+    ]
+  },
+  "sniper2": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      49,
+      79,
+      64,
+      17
+    ]
+  },
+  "railgun2": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      57,
+      83,
+      43,
+      13
+    ]
+  },
+  "chaingun": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      44,
+      82,
+      55,
+      27
+    ]
+  },
+  "sawgun": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      44,
+      82,
+      50,
+      31
+    ]
+  },
+  "beamer": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      50,
+      77,
+      51,
+      16
+    ]
+  },
+  "destroyer": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      44,
+      82,
+      60,
+      23
+    ]
+  },
+  "flamethrower": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      44,
+      82,
+      49,
+      27
+    ]
+  },
+  "rocket": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      40,
+      77,
+      53,
+      17
+    ]
+  },
+  "icannon": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      41,
+      75,
+      69,
+      19
+    ]
+  },
+  "sticklaunch": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      48,
+      82,
+      53,
+      18
+    ]
+  },
+  "hrocket": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      40,
+      75,
+      79,
+      20
+    ]
+  },
+  "spitter": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      43,
+      82,
+      45,
+      27
+    ]
+  },
+  "creditsgun": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      48,
+      79,
+      51,
+      21
+    ]
+  },
+  "hrocket2": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      46,
+      73,
+      58,
+      22
+    ]
+  },
+  "plasma": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      48,
+      82,
+      51,
+      18
+    ]
+  },
+  "grenade": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      49,
+      83,
+      30,
+      12
+    ]
+  },
+  "arifle": {
+    "w": 183,
+    "h": 183,
+    "ax": 0.2852,
+    "ay": 0.4754,
+    "reloadStart": null,
+    "reloadEnd": null,
+    "trim": [
+      48,
+      82,
+      51,
+      18
+    ]
+  }
+}

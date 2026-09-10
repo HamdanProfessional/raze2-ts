@@ -1,0 +1,250 @@
+[
+ {
+  "frame": 3,
+  "id": "raze",
+  "cost": 0,
+  "blood": "bloodHuman",
+  "race": "Human",
+  "name": "Raze Soldier"
+ },
+ {
+  "frame": 4,
+  "id": "raze2",
+  "cost": 0,
+  "blood": "bloodHuman",
+  "race": "Human",
+  "name": "Covert Ops"
+ },
+ {
+  "frame": 152,
+  "id": "raze3",
+  "cost": 50,
+  "blood": "bloodHuman",
+  "race": "Human",
+  "name": "Cpt. Biggs"
+ },
+ {
+  "frame": 1,
+  "id": "space",
+  "cost": 50,
+  "blood": "bloodHuman",
+  "race": "Human",
+  "name": "Space"
+ },
+ {
+  "frame": 2,
+  "id": "camo",
+  "cost": 50,
+  "blood": "bloodHuman",
+  "race": "Human",
+  "name": "Camouflage "
+ },
+ {
+  "frame": 6,
+  "id": "soldier",
+  "cost": 50,
+  "blood": "bloodHuman",
+  "race": "Human",
+  "name": "Soldier"
+ },
+ {
+  "frame": 5,
+  "id": "soldier2",
+  "cost": 50,
+  "blood": "bloodHuman",
+  "race": "Human",
+  "name": "Soldier (Alt)"
+ },
+ {
+  "frame": 7,
+  "id": "rambo",
+  "cost": 100,
+  "blood": "bloodHuman",
+  "race": "Human",
+  "name": "Johnny Rockit"
+ },
+ {
+  "frame": 8,
+  "id": "rambo2",
+  "cost": 100,
+  "blood": "bloodHuman",
+  "race": "Human",
+  "name": "Johnny Rambo"
+ },
+ {
+  "frame": 9,
+  "id": "mine",
+  "cost": 100,
+  "blood": "bloodHuman",
+  "race": "Human",
+  "name": "Miner"
+ },
+ {
+  "frame": 10,
+  "id": "girl",
+  "cost": 100,
+  "blood": "bloodHuman",
+  "race": "Human",
+  "name": "Dani"
+ },
+ {
+  "frame": 11,
+  "id": "girl2",
+  "cost": 100,
+  "blood": "bloodHuman",
+  "race": "Human",
+  "name": "Dani (Helmet)"
+ },
+ {
+  "frame": 12,
+  "id": "addison",
+  "cost": 250,
+  "blood": "bloodHuman",
+  "race": "Human",
+  "name": "AddisonR"
+ },
+ {
+  "frame": 13,
+  "id": "justin",
+  "cost": 250,
+  "blood": "bloodHuman",
+  "race": "Human",
+  "name": "Juice-Tin"
+ },
+ {
+  "frame": 50,
+  "id": "asnow",
+  "cost": 150,
+  "blood": "bloodAlien",
+  "race": "Alien",
+  "name": "Albino Alien"
+ },
+ {
+  "frame": 51,
+  "id": "adesert",
+  "cost": 150,
+  "blood": "bloodAlien",
+  "race": "Alien",
+  "name": "Desert Alien"
+ },
+ {
+  "frame": 52,
+  "id": "amarine",
+  "cost": 150,
+  "blood": "bloodAlien",
+  "race": "Alien",
+  "name": "Marine Alien"
+ },
+ {
+  "frame": 53,
+  "id": "aspace",
+  "cost": 150,
+  "blood": "bloodAlien",
+  "race": "Alien",
+  "name": "Space Alien"
+ },
+ {
+  "frame": 54,
+  "id": "ajungle",
+  "cost": 150,
+  "blood": "bloodAlien",
+  "race": "Alien",
+  "name": "Jungle Alien"
+ },
+ {
+  "frame": 55,
+  "id": "acommander",
+  "cost": 200,
+  "blood": "bloodAlien",
+  "race": "Alien",
+  "name": "Commander Alien"
+ },
+ {
+  "frame": 100,
+  "id": "bdesert",
+  "cost": 150,
+  "blood": "bloodRobot",
+  "race": "Robot",
+  "name": "Desert Bot"
+ },
+ {
+  "frame": 101,
+  "id": "bspace",
+  "cost": 150,
+  "blood": "bloodRobot",
+  "race": "Robot",
+  "name": "Space Bot"
+ },
+ {
+  "frame": 102,
+  "id": "bmine",
+  "cost": 150,
+  "blood": "bloodRobot",
+  "race": "Robot",
+  "name": "Mining Bot"
+ },
+ {
+  "frame": 103,
+  "id": "bsnow",
+  "cost": 200,
+  "blood": "bloodRobot",
+  "race": "Robot",
+  "name": "Snow Bot"
+ },
+ {
+  "frame": 104,
+  "id": "bjungle",
+  "cost": 200,
+  "blood": "bloodRobot",
+  "race": "Robot",
+  "name": "Jungle Bot"
+ },
+ {
+  "frame": 150,
+  "id": "zurban",
+  "cost": 150,
+  "blood": "bloodZombie",
+  "race": "Zombie",
+  "name": "Urban Zombie"
+ },
+ {
+  "frame": 151,
+  "id": "zbeach",
+  "cost": 150,
+  "blood": "bloodZombie",
+  "race": "Zombie",
+  "name": "Beach Zombie"
+ },
+ {
+  "frame": 153,
+  "id": "zelderly",
+  "cost": 150,
+  "blood": "bloodZombie",
+  "race": "Zombie",
+  "name": "Elderly Zombie"
+ },
+ {
+  "frame": 154,
+  "id": "zbiker",
+  "cost": 200,
+  "blood": "bloodZombie",
+  "race": "Zombie",
+  "name": "Biker Zombie"
+ },
+ {
+  "frame": 155,
+  "id": "zbiker2",
+  "cost": 200,
+  "blood": "bloodZombie",
+  "race": "Zombie",
+  "name": "Biker Zombie (Alt)"
+ },
+ {
+  "frame": 14,
+  "id": "mutate",
+  "cost": -1,
+  "blood": "bloodZombie",
+  "race": "Human",
+  "name": "Mutate"
+ }
+]

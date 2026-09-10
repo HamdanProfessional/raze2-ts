@@ -1,0 +1,179 @@
+// Headless front-end smoke test. Constructs every menu screen against the pixi
+// stub and ticks it, so a broken constructor or enterFrame is caught without a
+// browser. Rendering is a no-op; this only proves the screens build and run.
+
+const listeners: Record<string, Array<(e: any) => void>> = {};
+
+(globalThis as any).localStorage = {
+  store: {} as Record<string, string>,
+  getItem(k: string) { return this.store[k] ?? null; },
+  setItem(k: string, v: string) { this.store[k] = v; },
+  removeItem(k: string) { delete this.store[k]; },
+};
+(globalThis as any).window = {
+  open() {},
+  devicePixelRatio: 1,
+  addEventListener(type: string, fn: (e: any) => void) {
+    (listeners[type] ??= []).push(fn);
+  },
+  removeEventListener(type: string, fn: (e: any) => void) {
+    const arr = listeners[type];
+    if (!arr) return;
+    const i = arr.indexOf(fn);
+    if (i >= 0) arr.splice(i, 1);
+  },
+};
+
+/** Dispatch a synthetic keydown to every registered window listener. */
+function key(code: string): void {
+  for (const fn of [...(listeners["keydown"] ?? [])]) {
+    fn({ code, altKey: false, ctrlKey: false, metaKey: false, repeat: false, preventDefault() {} });
+  }
+}
+
+import { SD } from "../src/state/SD";
+import { Quality } from "../src/state/Quality";
+import type { Screen, ScreenClass } from "../src/core/Screen";
+import { MenuScreen } from "../src/screens/MenuScreen";
+import { CampaignScreen } from "../src/screens/CampaignScreen";
+import { StatsScreen } from "../src/screens/StatsScreen";
+import { InfoScreen } from "../src/screens/InfoScreen";
+
+let requested: ScreenClass | null = null;
+const fakeEngine: any = {
+  app: {},
+  root: { addChild() {} },
+  overlay: {},
+  setScreen(ctor: ScreenClass) {
+    requested = ctor;
+    return null;
+  },
+};
+
+function make<T extends Screen>(Ctor: new (e: any, a?: unknown) => T): T {
+  requested = null;
+  return new Ctor(fakeEngine);
+}
+
+SD.init();
+
+// --- menu hotkeys ----------------------------------------------------------
+{
+  SD.setQuality("high");
+  SD.setNoGlow(false);
+  SD.sound = true;
+  SD.music = true;
+
+  const s = make(MenuScreen);
+  const panel: any = (s as any).optionsPanel;
+  if (panel.visible) throw new Error("options panel should start hidden");
+
+  key("KeyQ");
+  if (!panel.visible) throw new Error("[Q] did not open the options panel");
+  if (Quality.level !== "max") throw new Error(`[Q] did not cycle quality (got ${Quality.level})`);
+
+  key("KeyG");
+  if (!SD.noGlow) throw new Error("[G] did not toggle glow off");
+  key("KeyG");
+  if (SD.noGlow) throw new Error("[G] did not toggle glow back on");
+
+  key("KeyM");
+  if (SD.music) throw new Error("[M] did not toggle music off");
+  key("KeyS");
+  if (SD.sound) throw new Error("[S] did not toggle sound off");
+  key("KeyM");
+  key("KeyS");
+  if (!SD.music || !SD.sound) throw new Error("audio hotkeys are not symmetric");
+
+  key("Escape");
+  if (panel.visible) throw new Error("[Esc] did not close the options panel");
+
+  s.enterFrame(1);
+  s.destructor();
+  key("KeyQ"); // must be inert now
+  console.log("MenuScreen: Q/G/M/S/Esc hotkeys work and unbind on destroy");
+}
+
+// --- campaign unlock states ------------------------------------------------
+{
+  // Restyled to the authentic Raze 2 list layout (doc 13 §2): a 15-row mission
+  // list per species with an unlocked / current / locked read on each row.
+  SD.curStage = 5;
+  const s = make(CampaignScreen);
+  const rows: any[] = (s as any).rows;
+  if (rows.length !== 15) throw new Error(`expected 15 mission rows, got ${rows.length}`);
+  const row = (num: number) => rows.find((r) => r.num === num);
+  if (row(4).numText.text !== "4.") throw new Error("completed/unlocked mission should show its number");
+  if (row(4).lock.visible) throw new Error("unlocked mission should not show a padlock");
+  if ((s as any).selected !== 5) throw new Error("current stage should be selected by default");
+  if (!row(6).lock.visible) throw new Error("locked mission should show a padlock");
+  if (!row(6).titleText.text.includes("Beat level 5 to unlock")) {
+    throw new Error(`locked row copy wrong: ${row(6).titleText.text}`);
+  }
+  for (let i = 0; i < 10; i++) s.enterFrame(1);
+  s.destructor();
+
+  // Deeper progress unlocks more rows.
+  SD.curStage = 7;
+  const s2 = make(CampaignScreen);
+  const rows2: any[] = (s2 as any).rows;
+  if (rows2.find((r) => r.num === 7).lock.visible) throw new Error("stage 7 should be unlocked at curStage 7");
+  if (!rows2.find((r) => r.num === 8).lock.visible) throw new Error("stage 8 should still be locked");
+  s2.destructor();
+  console.log("CampaignScreen: 15-row list, locked/current/unlocked states ok");
+}
+
+// --- stats reset flow ------------------------------------------------------
+{
+  SD.stats.kills = 11;
+  SD.medals["headshot"] = true;
+  const s = make(StatsScreen);
+  const confirm: any = (s as any).confirm;
+  if (confirm.visible) throw new Error("confirm dialog should start hidden");
+
+  (s as any).askReset();
+  if (!confirm.visible) throw new Error("RESET STATS did not raise the confirmation");
+  key("Escape");
+  if (confirm.visible) throw new Error("[Esc] did not dismiss the confirmation");
+  if (SD.stats.kills !== 11) throw new Error("cancelling still cleared the stats");
+
+  (s as any).askReset();
+  (s as any).doReset();
+  if (SD.stats.kills !== 0 || Object.keys(SD.medals).length !== 0) {
+    throw new Error("confirming did not clear stats/medals");
+  }
+  if (confirm.visible) throw new Error("confirm dialog stayed up after clearing");
+  if (!(s as any).toast.visible) throw new Error("no success message after reset");
+  for (let i = 0; i < 120; i++) s.enterFrame(1);
+  if ((s as any).toast.visible) throw new Error("success message never faded out");
+  s.destructor();
+  console.log("StatsScreen: reset confirmation, clear and toast ok");
+}
+
+// --- about / info screen ---------------------------------------------------
+{
+  const s = make(InfoScreen);
+  const max = (s as any).maxScroll;
+  if (!(max > 0)) throw new Error("info content should overflow and be scrollable");
+  key("End");
+  if ((s as any).scroll !== max) throw new Error("[End] did not jump to the bottom");
+  key("Home");
+  if ((s as any).scroll !== 0) throw new Error("[Home] did not jump to the top");
+  key("ArrowDown");
+  if ((s as any).scroll <= 0) throw new Error("[Down] did not scroll");
+  key("ArrowUp");
+  if ((s as any).scroll !== 0) throw new Error("[Up] did not scroll back / clamp at 0");
+  s.enterFrame(1);
+  key("Escape");
+  if (requested !== (MenuScreen as unknown as ScreenClass)) {
+    throw new Error("[Esc] did not close the info screen");
+  }
+  s.destructor();
+  console.log("InfoScreen: scrolls, clamps and closes");
+}
+
+if ((listeners["keydown"] ?? []).length !== 0) {
+  throw new Error(`screens leaked ${listeners["keydown"].length} keydown listeners`);
+}
+
+console.log("UI_SMOKE_OK");

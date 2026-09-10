@@ -1,0 +1,93 @@
+{
+ "cell": [
+  49,
+  45
+ ],
+ "cols": 9,
+ "anchor": [
+  0.18764,
+  0.31035
+ ],
+ "skinFrame": 3,
+ "note": "Authentic Raze 2 BACK arm baked from DefineSprite_136 (Unit_Arms2): armup + armlow only, no hands and no gun. Keyed by POSE rather than weapon id -- with no gun composited in, every weapon sharing a pose shares one bake. Band frame -> cell index matches armAnim.json exactly, so the back arm rides the front arm's playhead. `anchor` is the arm clip's shoulder origin as a fraction of a cell: it is the SAME shoulder point arm1 uses (UnitMC.as:103-109), so both arms are placed at one position and share one rotation.",
+ "poses": {
+  "pistol": {
+   "count": 54,
+   "idle": 0,
+   "fire": [
+    1,
+    15
+   ],
+   "reload": [
+    16,
+    53
+   ],
+   "rows": 6
+  },
+  "rifle": {
+   "count": 44,
+   "idle": 0,
+   "fire": [
+    1,
+    4
+   ],
+   "reload": [
+    5,
+    43
+   ],
+   "rows": 5
+  },
+  "shotgun": {
+   "count": 83,
+   "idle": 0,
+   "fire": [
+    1,
+    20
+   ],
+   "reload": [
+    21,
+    82
+   ],
+   "rows": 10
+  },
+  "sniper": {
+   "count": 60,
+   "idle": 0,
+   "fire": [
+    1,
+    14
+   ],
+   "reload": [
+    15,
+    59
+   ],
+   "rows": 7
+  },
+  "heavy": {
+   "count": 44,
+   "idle": 0,
+   "fire": [
+    1,
+    5
+   ],
+   "reload": [
+    6,
+    43
+   ],
+   "rows": 5
+  },
+  "rocket": {
+   "count": 70,
+   "idle": 0,
+   "fire": [
+    1,
+    13
+   ],
+   "reload": [
+    14,
+    69
+   ],
+   "rows": 8
+  }
+ }
+}

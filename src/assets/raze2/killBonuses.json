@@ -1,0 +1,182 @@
+[
+ {
+  "id": "headMult",
+  "worth": 4,
+  "name": "Headshot!",
+  "desc": "Kill an enemy by shooting them in the head."
+ },
+ {
+  "id": "crotchMult",
+  "worth": 5,
+  "name": "Crotch Shot!",
+  "desc": "Kill an enemy by shooting them in the crotch."
+ },
+ {
+  "id": "buttMult",
+  "worth": 12,
+  "name": "Butt Shot!",
+  "desc": "Kill an enemy by shooting them in the butt."
+ },
+ {
+  "id": "assassin",
+  "worth": 10,
+  "name": "Assassin!",
+  "desc": "Kill an enemy by shooting them in the back of the head."
+ },
+ {
+  "id": "burrowMult",
+  "worth": 8,
+  "name": "Suprise!",
+  "desc": "Kill the enemy by burrowing a saw through the ground."
+ },
+ {
+  "id": "splashDirect",
+  "worth": 3,
+  "name": "Direct Hit!",
+  "desc": "Kill an enemy with a direct hit from an explosive weapon."
+ },
+ {
+  "id": "splashIndirect",
+  "worth": 5,
+  "name": "Splish Splash!",
+  "desc": "Kill an enemy from splash damage on a non-explosive weapon."
+ },
+ {
+  "id": "spreeEnd",
+  "worth": 10,
+  "name": "Spree Ender!",
+  "desc": "Kill an enemy who is on a killing spree. (+5 kills without dying)"
+ },
+ {
+  "id": "reflect",
+  "worth": 4,
+  "name": "Reflection!",
+  "desc": "Kill an enemy by reflecting attacks off your Katana/Static Field."
+ },
+ {
+  "id": "jugKill",
+  "worth": 15,
+  "name": "Juggerkill!",
+  "desc": "Kill and become the juggernaught."
+ },
+ {
+  "id": "hasFlag",
+  "worth": 10,
+  "name": "Show Stopper!",
+  "desc": "Kill an enemy who is carrying the flag"
+ },
+ {
+  "id": "sword",
+  "worth": 4,
+  "name": "Slasher!",
+  "desc": "Kill an enemy with the katana."
+ },
+ {
+  "id": "fire",
+  "worth": 2,
+  "name": "Hot Hot Hot!",
+  "desc": "Set an enemy on fire and let them die by the fire."
+ },
+ {
+  "id": "dead",
+  "worth": 5,
+  "name": "Haunted!",
+  "desc": "Kill an enemy after you're already dead."
+ },
+ {
+  "id": "mauser",
+  "worth": 2,
+  "name": "Embarrassing!",
+  "desc": "Kill an enemy with the super weak Golden Mauser pistol."
+ },
+ {
+  "id": "chill",
+  "worth": 4,
+  "name": "Chill Pill!",
+  "desc": "Kill an enemy with a double bounced shot from the Hail Storm."
+ },
+ {
+  "id": "steal",
+  "worth": 2,
+  "name": "Kill Steal!",
+  "desc": "Kill an enemy who is low on health and fighting someone else."
+ },
+ {
+  "id": "onfire",
+  "worth": 3,
+  "name": "Disco Inferno!",
+  "desc": "Kill an enemy while you're on fire."
+ },
+ {
+  "id": "mine",
+  "worth": 3,
+  "name": "Mine your step!",
+  "desc": "Kill an unsuspecting enemy with a land mine."
+ },
+ {
+  "id": "domKill2",
+  "worth": 5,
+  "name": "Capture King!",
+  "desc": "Kill an enemy while capturing a flag in domination."
+ },
+ {
+  "id": "domKill",
+  "worth": 5,
+  "name": "Defender!",
+  "desc": "Kill an enemy who is capturing your flag in domination."
+ },
+ {
+  "id": "juice",
+  "worth": 2,
+  "name": "Juiced!",
+  "desc": "Kill the amazing Juice-Tin."
+ },
+ {
+  "id": "rad",
+  "worth": 2,
+  "name": "Rad!",
+  "desc": "Kill the almighty AddisonR."
+ },
+ {
+  "id": "survive",
+  "worth": 3,
+  "name": "Survivor!",
+  "desc": "Kill an enemy when you have only 1 hp remaining."
+ },
+ {
+  "id": "speed",
+  "worth": 5,
+  "name": "Speed Shot!",
+  "desc": "Kill an enemy while travelling at 35 mph."
+ },
+ {
+  "id": "hasFlag2",
+  "worth": 5,
+  "name": "Show Off!",
+  "desc": "Kill an enemy while carrying the flag."
+ },
+ {
+  "id": "noShield",
+  "worth": 5,
+  "name": "What Shield?",
+  "desc": "Kill an enemy who has over 20% shields in 1 hit."
+ },
+ {
+  "id": "invis",
+  "worth": 12,
+  "name": "What was that?",
+  "desc": "Kill an invisible enemy."
+ },
+ {
+  "id": "corpsestick",
+  "worth": 15,
+  "name": "Corpslosion!",
+  "desc": "Kill an enemy with a sticky grenade attached to a corpse."
+ },
+ {
+  "id": "refBounce",
+  "worth": 10,
+  "name": "Thanks!",
+  "desc": "Have an enemy kill someone else off your Katana/Static Field."
+ }
+]
