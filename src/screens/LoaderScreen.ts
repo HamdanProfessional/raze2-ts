@@ -20,7 +20,6 @@ import { SkinArt } from "../assets/SkinArt";
 import { SkinAnim } from "../assets/SkinAnim";
 import { ArmArt } from "../assets/ArmArt";
 import { ArmAnim } from "../assets/ArmAnim";
-import { ArmAnim2 } from "../assets/ArmAnim2";
 import { PickupArt } from "../assets/PickupArt";
 import { PickupWeaponArt } from "../assets/PickupWeaponArt";
 import { installGunDrop } from "../assets/GunDrop";
@@ -132,8 +131,9 @@ export class LoaderScreen extends Screen {
       SkinArt.load(), // Raze 2 baked skin figures (customize/shop previews)
       SkinAnim.load(), // Raze 2 ANIMATED skin bakes for the live in-game unit
       ArmArt.load(),
-      ArmAnim.load(), // authentic Raze 2 arm poses; bands stream in on equip
-      ArmAnim2.load(), // the back arm — six pose sheets, small enough to hold
+      // Authentic Raze 2 arms: every gun sheet plus the default skin's poses.
+      // Other skins' arm sheets stream in when a unit carrying them spawns.
+      ArmAnim.load(),
       PickupArt.load(),
       PickupWeaponArt.load(), // authentic weapon-pickup floater icons
       Backgrounds.loadCore(), // Raze 1 level art + one thumbnail per Raze 2 map

@@ -10,7 +10,6 @@ import { Guns } from "./Guns";
 import { getAbility } from "./Abilities";
 import { ArmArt } from "../assets/ArmArt";
 import { ArmAnim } from "../assets/ArmAnim";
-import { ArmAnim2 } from "../assets/ArmAnim2";
 import { AnimNoArm } from "../assets/AnimNoArm";
 import { AnimNoHead } from "../assets/AnimNoHead";
 import { HeadArt } from "../assets/HeadArt";
@@ -325,8 +324,19 @@ export class Unit {
   private bodyG = new Graphics();
   /** Baked armless SWF body frame (authentic motion, no arm). */
   private bodySprite: Sprite | null = null;
-  /** Front weapon arm + gun, overlaid and rotated about the shoulder to aim. */
-  private armSprite: Sprite | null = null;
+  /**
+   * Front weapon arm (`UnitMC.arm1`), rotated about the shoulder to aim.
+   *
+   * Three layers rather than one sprite, because the arm art is skin-framed
+   * while the gun is not, so they come off separate sheets and have to be
+   * composited at draw time — and the gun sits BETWEEN them, since the forward
+   * hand grips over the weapon. The container carries the shared transform;
+   * each layer just supplies a texture.
+   */
+  private armC: Container | null = null;
+  private armBack: Sprite | null = null;   // armup + armlow + hand1
+  private armGun: Sprite | null = null;    // the weapon
+  private armFront: Sprite | null = null;  // hand2, over the weapon
   /** Back arm (`UnitMC.arm2`): same shoulder, same angle, drawn behind the body. */
   private arm2Sprite: Sprite | null = null;
   private armGunId = "";
@@ -610,9 +620,7 @@ export class Unit {
         body.anchor.set(a.x, a.y);
         this.bodySprite = body;
         this.charC.addChildAt(body, 0);
-        const arm = new Sprite();
-        this.armSprite = arm;
-        this.charC.addChildAt(arm, 1);
+        this.addFrontArm(1);
         this.addBackArm();
         this.syncArm();
       }
@@ -641,9 +649,7 @@ export class Unit {
           this.headSprite = head;
           this.charC.addChildAt(head, z++);
         }
-        const arm = new Sprite();
-        this.armSprite = arm;
-        this.charC.addChildAt(arm, z);
+        this.addFrontArm(z);
         this.addBackArm();
         this.syncArm();
       }
@@ -677,9 +683,7 @@ export class Unit {
           this.charC.addChildAt(head, z++);
         }
 
-        const arm = new Sprite();
-        this.armSprite = arm;
-        this.charC.addChildAt(arm, z);
+        this.addFrontArm(z);
         this.addBackArm();
         this.syncArm();
       }
@@ -707,10 +711,32 @@ export class Unit {
    */
   private addBackArm(): void {
     const a = new Sprite();
-    const anc = ArmAnim2.anchor();
+    const anc = ArmAnim.anchor();
     a.anchor.set(anc.x, anc.y);
     this.arm2Sprite = a;
     this.charC.addChildAt(a, 0);
+  }
+
+  /**
+   * The front arm, as a container of three layers drawn back-to-front:
+   * arm+hand1, then the gun, then hand2 over it. All three share one anchor —
+   * the shoulder — and one cell size, so the container alone is transformed and
+   * the layers never need positioning relative to each other.
+   */
+  private addFrontArm(z: number): void {
+    const c = new Container();
+    const anc = ArmAnim.anchor();
+    const layer = (): Sprite => {
+      const s = new Sprite();
+      s.anchor.set(anc.x, anc.y);
+      c.addChild(s);
+      return s;
+    };
+    this.armBack = layer();
+    this.armGun = layer();
+    this.armFront = layer();
+    this.armC = c;
+    this.charC.addChildAt(c, z);
   }
 
   /**
@@ -730,32 +756,37 @@ export class Unit {
    * balance is untouched and only the artwork changes.
    */
   private syncArm(): void {
-    if (!this.armSprite) return;
-    const arm = this.armSprite;
+    if (!this.armC || !this.armBack || !this.armGun || !this.armFront) return;
     const id = this.gun?.curGun?.id ?? "pistol";
     const band = ArmAnim.pose(id);
 
-    // On weapon change: re-pivot to that art's shoulder and start its load.
+    // On weapon change: re-pivot to that art's shoulder and start its loads.
+    // The skin is part of the key now — the arm/hand art is skin-framed, so a
+    // unit's arm sheet depends on who is holding the weapon, not just which.
     if (id !== this.armGunId) {
       if (band) {
         const a = ArmAnim.anchor();
-        arm.anchor.set(a.x, a.y);
-        ArmAnim.ensure(id);
+        for (const s of [this.armBack, this.armGun, this.armFront]) {
+          s.anchor.set(a.x, a.y);
+        }
       } else {
         const p = ArmArt.pivot(id);
-        arm.anchor.set(p.ax, p.ay);
+        this.armBack.anchor.set(p.ax, p.ay);
       }
       this.armGunId = id;
       this.armCell = band?.idle ?? 0;
       this.armFiring = false;
     }
+    if (band) ArmAnim.ensure(id, this.skinId);
 
     // The port-invented natives (plasma / grenade / rifle) have no Raze 2 gun
-    // art to bake, so they keep the static legacy pose.
+    // art to bake, so they keep the static legacy pose on a single layer.
     if (!band) {
       const legacy = ArmArt.getTexture(id);
-      arm.visible = !!legacy;
-      if (legacy) arm.texture = legacy;
+      this.armC.visible = !!legacy;
+      if (legacy) this.armBack.texture = legacy;
+      this.armGun.visible = false;
+      this.armFront.visible = false;
       if (this.arm2Sprite) this.arm2Sprite.visible = false;
       return;
     }
@@ -787,16 +818,20 @@ export class Unit {
       }
     }
 
-    const tex = ArmAnim.getCell(id, this.armCell);
-    arm.visible = !!tex;
-    if (tex) arm.texture = tex;
-
-    // `arm1/arm2.gotoAndStop(...)` (Guns.as:239-248) — one playhead, both arms.
-    const back = this.arm2Sprite;
-    if (back) {
-      const tex2 = ArmAnim2.getCell(id, this.armCell);
-      back.visible = !!tex2;
-      if (tex2) back.texture = tex2;
+    // One playhead, four layers (`Guns.as:239-248` moves arm1 and arm2 together).
+    // The gun layer comes off the weapon's sheet; the three arm layers come off
+    // this unit's skin sheet, which is what makes the arm match the body.
+    const skin = this.skinId;
+    const set = (s: Sprite, tex: Texture | null): void => {
+      s.visible = !!tex;
+      if (tex) s.texture = tex;
+    };
+    set(this.armBack, ArmAnim.skinCell(skin, id, "back", this.armCell));
+    set(this.armGun, ArmAnim.gunCell(id, this.armCell));
+    set(this.armFront, ArmAnim.skinCell(skin, id, "front", this.armCell));
+    this.armC.visible = this.armBack.visible || this.armGun.visible;
+    if (this.arm2Sprite) {
+      set(this.arm2Sprite, ArmAnim.skinCell(skin, id, "arm2", this.armCell));
     }
   }
 
@@ -975,7 +1010,7 @@ export class Unit {
 
     // Weld the weapon arm onto the shoulder and aim it.
     this.syncArm();
-    const arm = this.armSprite;
+    const arm = this.armC;
     if (arm && arm.visible) {
       // `arm1.x = arm2.x = arm1hold.x` (UnitMC.as:103-109) — the arm sits exactly
       // on the shoulder marker, with no per-weapon displacement. The arm art has
@@ -1112,8 +1147,11 @@ export class Unit {
       tint = expiring ? 0xffffff : 0xff8a72;
     }
     this.bodySprite.tint = tint;
-    if (this.armSprite) this.armSprite.tint = tint;
-    if (this.arm2Sprite) this.arm2Sprite.tint = tint;
+    // Every arm layer, or a status flash would recolour the limb but not the
+    // weapon in its hand.
+    for (const s of [this.armBack, this.armGun, this.armFront, this.arm2Sprite]) {
+      if (s) s.tint = tint;
+    }
   }
 
   // --- name tag + speech -------------------------------------------------

@@ -3,13 +3,17 @@
   150,
   178
  ],
- "cols": 10,
+ "cols": 18,
  "anchor": [
   0.1856,
   0.44901
  ],
- "skinFrame": 3,
- "note": "Authentic Raze 2 aiming-arm animation baked from DefineSprite_387 (Unit_Arms1) composited with the weapon's own gun art from DefineSprite_380, exactly as Guns.as layers them at runtime. One sheet per weapon holding that weapon's whole pose band packed densely across `cols`: cell n is band frame n, with `idle`, `fire` (the recoil animation) and `reload` giving 0-based cell ranges into it. `anchor` is the arm clip's shoulder origin as a fraction of a cell -- set it as the sprite anchor and rotate there to aim.",
+ "bands": {
+  "back": 0,
+  "front": 1,
+  "arm2": 2
+ },
+ "note": "Authentic Raze 2 arms baked from DefineSprite_387 (arm1) and DefineSprite_136 (arm2). Split on the two axes the SWF itself splits on: the arm/hand parts are SKIN strips, the gun is the DefineSprite_380 strip indexed by curGun.sprite. So a skin sheet (skin/<skin>/<pose>.png) carries the arm art for every weapon sharing that pose, and a gun sheet (gun/<weapon>.png) carries just the weapon. A skin sheet holds three bands of `count` cells -- back (armup+armlow+hand1), front (hand2), arm2 -- because the gun draws between hand1 and hand2; cell index is band*count+frame. All four layers share one cell and one `anchor` (the shoulder), since UnitMC.as:103-109 gives arm1 and arm2 the same origin.",
  "poses": {
   "pistol": {
    "count": 54,
@@ -22,7 +26,8 @@
     16,
     53
    ],
-   "rows": 6
+   "rows": 9,
+   "gunRows": 3
   },
   "rifle": {
    "count": 44,
@@ -35,7 +40,8 @@
     5,
     43
    ],
-   "rows": 5
+   "rows": 8,
+   "gunRows": 3
   },
   "shotgun": {
    "count": 83,
@@ -48,7 +54,8 @@
     21,
     82
    ],
-   "rows": 9
+   "rows": 14,
+   "gunRows": 5
   },
   "sniper": {
    "count": 60,
@@ -61,7 +68,8 @@
     15,
     59
    ],
-   "rows": 6
+   "rows": 10,
+   "gunRows": 4
   },
   "heavy": {
    "count": 44,
@@ -74,7 +82,8 @@
     6,
     43
    ],
-   "rows": 5
+   "rows": 8,
+   "gunRows": 3
   },
   "rocket": {
    "count": 70,
@@ -87,7 +96,8 @@
     14,
     69
    ],
-   "rows": 7
+   "rows": 12,
+   "gunRows": 4
   }
  },
  "weapons": {
@@ -127,5 +137,38 @@
   "spitter": "heavy",
   "creditsgun": "rifle",
   "hrocket2": "rocket"
- }
+ },
+ "skins": [
+  "acommander",
+  "addison",
+  "adesert",
+  "ajungle",
+  "amarine",
+  "asnow",
+  "aspace",
+  "bdesert",
+  "bjungle",
+  "bmine",
+  "bsnow",
+  "bspace",
+  "camo",
+  "girl",
+  "girl2",
+  "justin",
+  "mine",
+  "mutate",
+  "rambo",
+  "rambo2",
+  "raze",
+  "raze2",
+  "raze3",
+  "soldier",
+  "soldier2",
+  "space",
+  "zbeach",
+  "zbiker",
+  "zbiker2",
+  "zelderly",
+  "zurban"
+ ]
 }
