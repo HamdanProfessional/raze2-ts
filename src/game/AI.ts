@@ -15,21 +15,24 @@ import type { GameScreen } from "./GameScreen";
  *  - Difficulty `diff` (0..10) drives the exact `setDiffStats` table: duck/crouch
  *    chances (standNormal/standTarget/standFlag), fire probability (shotChance,
  *    with the guaranteed-fire diff==10 special case) and aim-lerp speed (aimSpeed).
- *  - Non-campaign (arena/skirmish) bots AIM AT THE HUMAN PLAYER by default; the
- *    per-unit `target` only gates *when/whether* they shoot. Genuine per-unit
- *    target aiming is the campaign-only override (AI.as:377-383, §4.1 of the doc).
+ *  - Every bot aims at the unit it acquired. Tracking the human is an opt-in
+ *    override for scripted escorts (`extra.aimPlayer`, AI.as:365-383) — NOT the
+ *    default. See aimStep(), which documents the bug the old reading caused.
  *  - Nearest-visible (line-of-sight) enemy target selection.
  *  - Proactive per-ability use with the documented trigger chances (teleport 2%,
  *    cloak 10%, mine 10%, sword/grenade range-gated), respecting energy.
  *  - Opportunistic duck/crouch (holds K.DOWN) via the diff-scaled stand/nostand
  *    timers, plus Domination hold-and-duck on a contested point.
- *  - Waypoint-graph patrol with a bounded-DFS shortest-path CTF route (random
- *    among the shortest N, mirroring pathFind/searchNode) and a wpTimer stuck-
- *    recovery timeout (getClosestWp).
+ *  - ONE movement mode: the waypoint walk, run whether or not a target exists
+ *    (AI.as:548-565 never reads `target`), with a bounded-DFS shortest-path CTF
+ *    route (random among the shortest N, mirroring pathFind/searchNode) and a
+ *    wpTimer stuck-recovery timeout (getClosestWp). Arrival is horizontal-only.
+ *  - Jumps come from waypoint action boxes and nowhere else.
  *
  * Port-specific extensions (NOT present in Raze 2's AI.as), kept intentionally:
  *  - Weapon-range-aware weapon selection (chooseWeapon) — Raze 2 bots never
- *    switch weapons by AI logic.
+ *    switch weapons by AI logic. Note this is the ONLY thing range still drives;
+ *    it deliberately does not affect movement.
  *  - Personality chatter (Personality.ts) is a RAZE 1 import (Personality.as);
  *    Raze 2 skirmish bots are silent. It is left in place per the port's design
  *    but flagged here as non-authentic to Raze 2. See §10 of the doc.
@@ -434,10 +437,17 @@ export class AI extends Unit {
     if (!this.nextNode) this.pickNextNode();
 
     // Reached current waypoint? choose another (and reset the stuck timer).
+    //
+    // Arrival is HORIZONTAL ONLY: `AI.as:550` tests `nextWp.x > x - 30 &&
+    // nextWp.x < x + 30` and nothing about y. A euclidean test instead means a
+    // bot standing level with a node but on a ledge below it never arrives and
+    // never re-routes — and since it keeps walking into that node's action box,
+    // a `d` zone double-jumps it every frame forever. That is the hop-in-place
+    // bug. There is no `!jumping` guard in the original either; arriving
+    // mid-jump is normal, because jumping is how you get to half these nodes.
     if (
       !this.nextNode.reached &&
-      UT.getDist(this.nextNode.x, this.nextNode.y, this.x, this.y) < 35 &&
-      !this.jumping
+      Math.abs(this.nextNode.x - this.x) < 30
     ) {
       this.nextNode.reached = true;
       this.wpTimer = 0;
@@ -509,16 +519,21 @@ export class AI extends Unit {
     // Proactive ability use (teleport/cloak/mine/sword/grenade).
     this.tryAbility(dist);
 
-    // Movement: a committed stand pose freezes the bot in place (AI.as gates the
-    // waypoint walk and combat strafing behind `!stand`).
+    // Which gun to hold still depends on how far the target is...
+    if (this.target) {
+      this.setGun = this.chooseWeapon(dist);
+      this.gun.selectGun(this.setGun);
+    }
+
+    // ...but where to walk does not. `AI.as:548-565` moves toward `nextWp.x`
+    // with no reference to `target` anywhere in the block: a bot walks its
+    // route and shoots what it passes, rather than closing to a preferred range
+    // and strafing there. A committed stand pose freezes it (the original gates
+    // each direction on `!stand`), and diff-0 dummies do not move at all.
     if (this.stand > 0) {
       // holding position (K.DOWN already set by updateStance if ducking)
     } else if (this.waitCounter > 0) {
       this.waitCounter--;
-    } else if (this.target) {
-      this.setGun = this.chooseWeapon(dist);
-      this.gun.selectGun(this.setGun);
-      this.combatMove(dist);
     } else {
       this.patrol();
     }
@@ -624,28 +639,6 @@ export class AI extends Unit {
     }
   }
 
-  /** Combat movement only (strafe + jumps); aiming and firing are separate. */
-  private combatMove(dist: number): void {
-    const g = this.target;
-    const minR = (this.gun.curGun.AI_minRange ?? 0) * RANGE_PX;
-    const maxR = (this.gun.curGun.AI_maxRange ?? 60) * RANGE_PX;
-    if (this.hasFlag && this.goal) {
-      // Carrying the enemy flag: break contact and run home, shooting on the move.
-      this.keys |= this.goal.x > this.x ? K.RIGHT : K.LEFT;
-    } else if (dist > maxR) {
-      this.keys |= g.x > this.x ? K.RIGHT : K.LEFT;
-    } else if (dist < minR) {
-      this.keys |= g.x > this.x ? K.LEFT : K.RIGHT;
-    }
-
-    // Authored jump zones apply in combat too. `AI.as` never branches its jump
-    // logic on whether a target exists — the action-box scan at :598-618 runs on
-    // every frame that is not a committed stand pose. Skipping it here was what
-    // left the port's bots unable to gain height once a fight started, which is
-    // the gap the removed random hop below was really papering over.
-    this.jumpZones();
-  }
-
   /**
    * Jump where the level designer said to, and nowhere else.
    *
@@ -740,9 +733,22 @@ export class AI extends Unit {
     return px > b.x && px < b.x + b.w && py > b.y && py < b.y + b.h;
   }
 
+  /**
+   * Walk the route. This is the bot's *only* movement: `AI.as` runs the same
+   * waypoint walk whether or not it has a target, so a bot in a firefight keeps
+   * heading where it was going and shoots across it.
+   *
+   * There used to be a `combatMove` alongside this that took over the moment a
+   * target appeared and strafed to hold the weapon's preferred range. Nothing in
+   * the original does that — the movement block at `AI.as:548-565` never reads
+   * `target` — and because it replaced this method wholesale it also cut bots
+   * off from their objective routing and jump zones for the whole fight.
+   */
   private patrol(): void {
     // Head for the objective (CTF flag / Domination point) when one is set and
-    // no waypoint route is queued; otherwise walk the waypoint graph.
+    // no waypoint route is queued; otherwise walk the waypoint graph. The flag
+    // carrier's run home is routed here too, which is why combatMove's separate
+    // copy of it was redundant.
     const n = this.ctfPath.length ? this.nextNode : this.goal ?? this.nextNode;
     if (this.x > n.x + 5) this.keys |= K.LEFT;
     else if (this.x < n.x - 5) this.keys |= K.RIGHT;
