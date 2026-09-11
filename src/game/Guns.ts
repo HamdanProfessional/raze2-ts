@@ -27,9 +27,28 @@ const RELOAD_END_SOUND: Record<string, string> = {
   pistol: "Assault_Slide", rifle: "Assault_Slide", shotgun: "SGClip",
   sniper: "Pull", heavy: "Assault_Slide", rocket: "nadeClipout",
 };
+/** `Bullet.as:472`: the 400th foliage hit earns "I hate nature!". */
+const FOLIAGE_SHOTS = 400;
+/** Raze 2 weapon `type` 4 — the sniper/railgun rack. */
+const SNIPER_SLOT = 4;
+
 const HEADSHOT_SOUNDS = ["Headshot1", "Headshot2", "Headshot3"];
 
 type LiveGun = WeaponDef & { curClip: number; curAmmo: number };
+
+/**
+ * Which blood effect a hit on `victim` throws (`Bullet.as:201-211`).
+ *
+ * A shielded target does not bleed — the round breaks against the bubble and
+ * throws gold sparks instead, which is the only cue that the damage is going
+ * into shield rather than health. The "lol cats" secret swaps the splat for its
+ * rainbow twin. `fallback` keeps the port's own blood/bloodBig distinction for
+ * the ordinary case; the SWF has only one splat there.
+ */
+function bloodEffect(shielded: boolean, fallback: string): string {
+  if (shielded) return "bloodShield";
+  return SD.matchSettings?.specialMode === "lol cats" ? "bloodRainbow" : fallback;
+}
 
 /**
  * Per-unit weapon controller. Ported from Guns.as (arsenal, selection, reload,
@@ -353,11 +372,17 @@ export class Guns {
     }
 
     // Hair Trigger (equips.rof, e.g. 0.8) shortens the between-shot cooldown.
+    // Rapid Fire halves it outright and *replaces* the Hair Trigger term rather
+    // than stacking with it — `Guns.as:406` picks one or the other:
+    //   shootDelay * (sRapid ? 15 : (rof ? 30 * rof : 30))
+    const rapid = this.unit.status?.rapidTimer > 0;
     const baseDelay = this.curGun.fireDelay ?? 8;
-    this.cooldown = baseDelay * (this.unit.equips?.rof || 1);
+    this.cooldown = rapid ? baseDelay * 0.5 : baseDelay * (this.unit.equips?.rof || 1);
     // Sandbox / infinite-ammo matches never deplete the clip, so the weapon
-    // fires forever and never has to reload.
-    if (!SD.matchSettings.infiniteAmmo) this.curGun.curClip--;
+    // fires forever and never has to reload. Rapid Fire is free too — it shares
+    // the Infinite Ammo branch in `Guns.as:416`, so the clip never drains and
+    // the gun never stops to reload while it is up.
+    if (!SD.matchSettings.infiniteAmmo && !rapid) this.curGun.curClip--;
     this.unit.score.addShot();
 
     // Fire sound. Beam weapons (zapper/beamer/flamethrower) re-fire every 1–2
@@ -377,7 +402,9 @@ export class Guns {
     const heat = 1 + Math.min(1, this.recoilAmount) * (RECOIL_SPREAD_MAX - 1);
     const spread =
       this.curGun.recoil * 0.15 * (this.unit.equips?.recoil || 1) * heat;
-    const aim = this.unit.aimRotation;
+    // The spin of a double-jump flip is part of where the barrel points, so
+    // the round leaves along `fireRotation`, not the body-space arm angle.
+    const aim = this.unit.fireRotation;
     this.lookAngle = aim;
     const tip = this.muzzleTip(aim);
     // The report comes from the barrel, not the chest. Held sideways at arm's
@@ -476,7 +503,7 @@ export class Guns {
 
   /** Drift a puff of smoke off the barrel tip; called for a few ticks after firing. */
   private emitSmokePuff(): void {
-    const angle = this.unit.aimRotation;
+    const angle = this.unit.fireRotation;
     const rad = (angle * Math.PI) / 180;
     const tip = this.muzzleTip(angle);
     const size = 2 + (this.curGun.muzzleSize ?? 9) * 0.16;
@@ -510,7 +537,10 @@ export class Guns {
     /** Did the ray terminate on geometry (as opposed to a body or thin air)? */
     let hitWall = false;
     /** Where the ray last drew blood, for the on-unit impact effect. */
-    let unitHit: { x: number; y: number } | null = null;
+    // `shielded` is sampled BEFORE the damage lands: `Bullet.as` draws the blood
+    // at line 205 and calls `status.damage` at 242, so the shot that empties a
+    // shield still sparks off it — and the shieldbreak fires alongside.
+    let unitHit: { x: number; y: number; shielded: boolean } | null = null;
     /** First unit hit — the seed for an arc-chain (railgun2). */
     let primaryTarget: any = null;
     // Kills from this single shot — 3 in one railgun blast earns "Knockout".
@@ -541,9 +571,10 @@ export class Guns {
           const dmgMod = isZapper
             ? Math.max(0.5, ((range - step) / range) * 1.5 + 0.5)
             : 1;
+          const shielded = (u.status.shCur ?? 0) > 0;
           if (this.doHitUnit(u, px, py, cos, sin, hs, dmgMod)) killsThisShot++;
           hitAny = true;
-          unitHit = { x: px, y: py };
+          unitHit = { x: px, y: py, shielded };
           if (!primaryTarget) primaryTarget = u;
           if (!this.curGun.piercing) {
             blocked = true;
@@ -570,10 +601,26 @@ export class Guns {
     // plasma, orange rocket): sparks where the ray bit geometry, the flesh
     // effect where it bit a body. A ray that expired in open air leaves
     // nothing behind — only the tracer sells it.
+    // The surface the ray bit. Sampled for every shooter, not just the player:
+    // the achievements below are human-only, but the splash the surface throws
+    // up is not — a bot crossing the mud has to kick it up too.
+    const surf = hitWall ? arena.wallMask?.surfaceTypeAt(hitX, hitY) : null;
+    if (hitWall) this.unit.game.addSurfaceSplash(hitX, hitY, surf?.type);
     if (hitWall && this.unit.human) {
       // Two of the walkthrough's steps are cleared by shooting a marked panel.
-      const surf = arena.wallMask?.surfaceTypeAt(hitX, hitY);
       if (surf?.type === "tutWall") this.unit.game.tutorial?.shotWall(this.curGun.slot);
+      // `Bullet.as:426-431`: the moon only counts if a *sniper-class* weapon
+      // reaches it, which is the whole joke of "Reach for the Sky". The
+      // original tests `stats.type == 4`; the port carries that field as `slot`.
+      else if (surf?.type === "secretMoon" && this.curGun.slot === SNIPER_SLOT) {
+        Achievements.addAch("moon");
+      }
+      // `Bullet.as:465-474`: shooting foliage racks up a per-unit counter and
+      // the 400th shot earns it. Kept per-unit and per-match like the original.
+      else if (surf?.type === "foliage") {
+        this.unit.treeShoot = (this.unit.treeShoot ?? 0) + 1;
+        if (this.unit.treeShoot >= FOLIAGE_SHOTS) Achievements.addAch("ammo");
+      }
     }
     if (hitWall) {
       // Spray the sparks back off the surface — toward where the shot came from
@@ -592,8 +639,9 @@ export class Guns {
     if (unitHit) {
       // Blood keeps its own (victim) tint — don't stain it with the weapon's
       // spark colour; energy impacts (plasma/lightning) do take the tint.
-      const eff = this.curGun.unitEff ?? "blood";
+      let eff = this.curGun.unitEff ?? "blood";
       const isBlood = eff === "blood" || eff === "bloodBig";
+      if (isBlood) eff = bloodEffect(unitHit.shielded, eff);
       this.unit.game.addEffect(
         unitHit.x,
         unitHit.y,
@@ -714,12 +762,26 @@ export class Guns {
       this.unit.game.addEffect(hx, hy, "crit");
     }
     if (this.curGun.percAmmo && this.curGun.curAmmo > 0) this.curGun.curAmmo--;
+    // A round that travels the way the target faces came from behind them, so a
+    // headshot on it is an "Assassin!" rather than a plain "Headshot!"
+    // (`Bullet.as:552-556`). Crit-immune targets score neither.
+    const fromBehind = Math.sign(cos) === Math.sign(target.facing ?? 1);
     return target.status.doDamage(dmg, {
       attacker: this.unit,
       x: cos,
       y: sin,
       headShot,
       region,
+      cause: {
+        gun: this.curGun.id,
+        assassin: headShot && fromBehind,
+        headMult: headShot && !fromBehind,
+        crotchMult: region === "crotch",
+        buttMult: region === "butt",
+        // "Direct Hit!": a landed hit from a weapon with a big blast radius.
+        splashDirect: (this.curGun.splashRadius ?? 0) >= 80,
+        setFire: this.curGun.setFire,
+      },
     });
   }
 
@@ -758,7 +820,7 @@ export class Guns {
    */
   private ejectMagazine(): void {
     if (!this.curGun.shell) return;
-    const angle = this.unit.aimRotation;
+    const angle = this.unit.fireRotation;
     const tip = this.muzzleTip(angle);
     const rad = (angle * Math.PI) / 180;
     // Back down the barrel from the tip: roughly where the breech sits.
@@ -813,7 +875,7 @@ export class Guns {
     // bleeds down toward the weapon's base recoil in `Guns.as:202-204`.
     this.recoilAmount *= RECOIL_DECAY;
     if (this.recoilAmount < 0.001) this.recoilAmount = 0;
-    this.lookAngle = this.unit.aimRotation;
+    this.lookAngle = this.unit.fireRotation;
 
     // Barrel smoke: puffs trail out of a hot barrel for a few ticks after
     // firing. Decorative, so the whole emitter is off on the Low profile.
@@ -843,8 +905,12 @@ export class Guns {
       this.reloadAngle = 0;
       this.reloadProgress = 0;
     }
-    // Sustained fire for auto weapons.
-    if (this.firing && this.curGun.autoFire && !this.reloading && this.cooldown === 0) {
+    // Sustained fire for auto weapons — and for every weapon while Rapid Fire
+    // is up. `Guns.as:365` only latches `shotPressed` when `!sRapid`, and that
+    // latch is what stops a semi-auto repeating on a held trigger, so rapid
+    // fire turns the whole arsenal full-auto.
+    const rapid = this.unit.status?.rapidTimer > 0;
+    if (this.firing && (this.curGun.autoFire || rapid) && !this.reloading && this.cooldown === 0) {
       this.tryShoot();
     }
   }

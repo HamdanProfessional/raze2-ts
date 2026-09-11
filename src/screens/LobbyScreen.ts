@@ -8,6 +8,7 @@ import { makeBackground, makeVeil } from "./ui";
 import { Net } from "../net/Net";
 import { LEVELS } from "../game/Arena";
 import { MAX_HUMANS, type RoomView, type RoomSettings } from "../net/protocol";
+import { teamColor, teamName } from "../ui/raze2/palette";
 import {
   Raze2Button,
   Raze2Panel,
@@ -154,11 +155,12 @@ export class LobbyScreen extends Screen {
       this.content.addChild(tag);
 
       if (teamMode) {
-        const teamLabel = p.team === 1 ? "RED" : p.team === 2 ? "BLUE" : "—";
-        const teamColor = p.team === 1 ? 0xff6a5a : p.team === 2 ? 0x5aa0ff : C_DIM;
+        // Sides are Blue / Orange, never red — see `TEAM_NAMES`.
+        const teamLabel = p.team ? teamName(p.team).toUpperCase() : "—";
+        const teamTint = p.team ? teamColor(p.team) : C_DIM;
         const tt = new Text({
           text: teamLabel,
-          style: new TextStyle({ fill: teamColor, fontFamily: FONT_VALUE, fontSize: 13 }),
+          style: new TextStyle({ fill: teamTint, fontFamily: FONT_VALUE, fontSize: 13 }),
         });
         tt.anchor.set(1, 0);
         tt.x = x + w - 90;
@@ -351,7 +353,7 @@ export class LobbyScreen extends Screen {
   }
 
   private leaveToBrowser(): void {
-    void import("./MultiplayerScreen").then(({ MultiplayerScreen }) => this.engine.setScreen(MultiplayerScreen));
+    void import("./MultiplayerScreen").then(({ MultiplayerScreen }) => this.engine.setScreen(MultiplayerScreen, undefined, "slideRight"));
   }
 
   private showToast(msg: string): void {

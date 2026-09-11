@@ -26,8 +26,11 @@ import SKIN_ANIM from "./raze2/skinAnim.json";
  *            then sit on the unit origin). Baked facing right; flip x to face left.
  *   scale  — on-screen render scale so the figure matches the Raze-1 rig height.
  *   sheet  — [w,h] of the full spritesheet PNG.
- *   states — name -> { row, count, shoulder[frame]=[x,y] } where shoulder is the
- *            weapon-arm attach point in clip px (feet origin, y up = negative).
+ *   states — name -> { row, count, shoulder[frame]=[x,y], ability[frame]=
+ *            [x,y,rotDeg] }. `shoulder` is the weapon-arm attach point in clip
+ *            px (feet origin, y up = negative); `ability` is the back slot
+ *            (backpack / CTF flag) in the same basis, plus the torso rotation
+ *            the pack has to tilt with.
  */
 
 interface StateInfo {
@@ -35,6 +38,8 @@ interface StateInfo {
   start: number;
   count: number;
   shoulder: [number, number][];
+  /** Back-slot attach point: [x, y, rotation in degrees]. */
+  ability: [number, number, number][];
 }
 interface AnimManifest {
   cell: [number, number];
@@ -90,6 +95,19 @@ export const SkinAnim = {
     const i = Math.max(0, Math.min(frame - 1, s.shoulder.length - 1));
     const p = s.shoulder[i] ?? [0, -57];
     return { x: p[0], y: p[1] };
+  },
+
+  /**
+   * Back-slot attach point for a state/frame (clip px, feet origin) plus the
+   * torso rotation, so the backpack / flag rides the body's lean.
+   */
+  ability(state: string, frame: number): { x: number; y: number; rot: number } {
+    const s = manifest.states[state] ?? manifest.states.idle;
+    const arr = s.ability;
+    if (!arr?.length) return { x: -10, y: -51, rot: 0 };
+    const i = Math.max(0, Math.min(frame - 1, arr.length - 1));
+    const p = arr[i];
+    return { x: p[0], y: p[1], rot: p[2] };
   },
 
   /**

@@ -214,54 +214,39 @@ this is a faithful re-implementation of `Hud.playSong()`'s random pick and
 ~1.2s linear fade; this is a minor fidelity gap, not a missing feature.
 
 **Missing / not ported:**
-- Cutscene pre/post music (`MatchSettings.preCutSong`/`postCutSong`, driven by
-  `Stats_Campaign.setCutscene`) — there is no `Cutscene` screen in the port at all (confirmed: no
-  file references `Cutscene`, `CutSong`, `preCut`, or `postCut` under `raze-ts/src`), so none of
-  the mission-specific cutscene tracks (forced `M_Infernal`/`M_Theloop`/`M_Rose`/`M_Throwdown`
-  overrides at dramatic story beats) ever play.
-- The HUD's in-match manual song browser (`Hud.playSong()` — "Play Next Song" advance/random
-  button) has no port equivalent found in `GameScreen.ts` or `Hud`-related files.
+- Music crossfade. `Sounds.ts` `setMusic()` hard-cuts the old track (`stopMusic()`) where the
+  original does a ~1.2s linear fade. A fidelity gap, not a missing feature.
+- The HUD's in-match manual song browser (`Hud.playSong()`'s "Play Next Song" advance button) has
+  no port equivalent. Track selection still happens — `Sounds.ts` picks the same random
+  `R2_*` track per match and honours a campaign mission's forced song — there is just no button
+  to skip one mid-match.
 
-**Sound effects — 0/36 originals ported with matching audio.** `Sounds.ts`'s `MANIFEST`
-(`Sounds.ts:24-81`) contains only **Raze 1** sound effects (ids 162-200, 1-2, from the original
-Raze), reused wholesale for Raze 2 gameplay. Every Raze-2-specific effect id (2114-2145 range,
-plus legacy 35/36/39/40/41) has **no corresponding file** under `public/assets/sounds/` and no
-manifest key — only the `r2_*` **music** files were extracted. Concretely:
+**Sound effects — 46/46 originals extracted and wired.** *(This section previously claimed 0/36;
+that was written before the extraction pass and was wrong. Corrected 2026-09-12.)*
 
-| Raze 2 original | Port's stand-in (Raze 1 asset, wrong game) | Call site |
+`decompiled_swf/raze 2/sounds/` holds 46 files and all 46 are present under
+`public/assets/sounds/` as `r2_*.mp3`, each with a `MANIFEST` key in `Sounds.ts`. The Raze 1 keys
+the port grew up on are kept as **aliases onto the Raze 2 asset**, so legacy call sites keep
+working while playing the right audio:
+
+| Legacy key | Resolves to | Notes |
 |---|---|---|
-| `S_pistolFire` | `PistolFire` (`184_S_PistolFire.mp3`) | `Guns.ts:11-15 FIRE_SOUND.pistol` |
-| `S_shotgunFire` | `ShotgunFire` (`180_S_ShotgunFire.mp3`) | `FIRE_SOUND.shotgun` |
-| `S_assaultFire` | `Arifle2` (`165_S_Arifle2.mp3`) | `FIRE_SOUND.rifle` |
-| `S_uziFire` | `Uzi1`/`Uzi2` (`173_`/`174_S_Uzi*.mp3`) | `tryShoot()` — `Guns.ts:225` |
-| `S_sniperFire` | `SniperFire` (`164_S_SniperFire.mp3`) | `FIRE_SOUND.sniper` |
-| `S_alienSniper` | `Lightning` (`186_S_Lightning.mp3`) | `FIRE_SOUND.railgun` |
-| `S_plasmaFire` | `Zapper` (`194_S_Zapper.mp3`) | `FIRE_SOUND.plasma` |
-| `S_ripperFire` | `Chainfire` (`183_S_Chainfire.mp3`) | `FIRE_SOUND.chaingun` |
-| `S_rocketFire` | `Rocket` (`187_S_Rocket.mp3`) | `FIRE_SOUND.rocket` |
-| `S_Whip` (grenade throw) | `Nadeout` (`192_S_Nadeout.mp3`) | `FIRE_SOUND.grenade` |
-| `S_rocketExplode` | `rocketexplode` (`171_S_rocketexplode.mp3`) / `explodenade` (`175_`) | `Projectile.ts:322-323` |
-| `S_GunClick` | `GunClick` (`162_S_GunClick.mp3`) | `Guns.ts:207`, `Player.ts:87` |
-| `S_reloadPistol` etc. (6 variants) | `PistolReload`/`Assault_Clipin`/`RailReload`/`ShotgunPump`/`nadeClipin`/`windup` | `RELOAD_SOUND` map, `Guns.ts:16-20` |
-| (no original "reload-end" sound — engine has no second reload stinger) | `Assault_Slide`/`SGClip`/`Pull`/`nadeClipout` | `RELOAD_END_SOUND` map, `Guns.ts:27-31` — **port invention**, not in the original at all |
-| `S_Headshot1/2/3` | `Headshot1/2/3` (`177-179_S_Headshot*.mp3`) | `HEADSHOT_SOUNDS`, `Guns.ts:32` |
-| `S_Medal` | `Medal` (`163_S_Medal.mp3`) | `Achievements.ts:140`, `Objectives.ts:114` |
-| `S_Jumppad`, teleport whoosh | synthesized `"whoosh"` (`playSynth`, `Sounds.ts:413-432`) | `Abilities.ts:144,238`, `Unit.ts:989,1195` |
-| landing thump (no Raze-2-original — see below) | synthesized `"land"` | `Unit.ts:1219` |
-| `S_Click`/`S_ClickGo`/`S_ClickBack`/`S_Equip`/`S_Error` (5 distinct UI stingers) | single generic `"Beep"` (`172_S_Beep.mp3`, Raze 1 asset) for **every** UI interaction across all menu/screen files | dozens of call sites, e.g. `MenuScreen.ts:182` etc. |
-| `S_Heal`, `S_Powerup` (pickup/ability feedback) | not ported — no call sites found for pickup/heal/powerup audio in `NodePickup`-equivalent or `Unit.ts` ability code | — |
-| `S_Static` (armor-lock ability) | not ported | — |
-| `S_CamelJizz` (title Easter egg) | not applicable — no camel Easter egg feature in the port | — |
+| `PistolFire` / `ShotgunFire` / `Arifle2` / `SniperFire` / … | `R2_pistolFire` / `R2_shotgunFire` / `R2_assaultFire` / `R2_sniperFire` / … | one per weapon class |
+| `Chainfire`, `Rocket`, `Nadeout` | `R2_ripperFire`, `R2_rocketFire`, `R2_Whip` | |
+| `PistolReload`, `Assault_Clipin`, `ShotgunPump`, `RailReload`, `windup`, `nadeClipin` | the six `R2_reload*` variants | rifle+uzi and sniper+railgun share one, as in the original |
+| `rocketexplode`, `explodenade` | `R2_rocketExplode` | Raze 2 uses one detonation sound for both |
+| `GunClick`, `Headshot1/2/3`, `Medal` | `R2_GunClick`, `R2_Headshot1/2/3`, `R2_Medal` | `Guns.ts` picks among the three headshots at random, like the SWF |
+| `Beep` | `R2_Click` | see below |
 
-**Biggest gaps, summarized:**
-1. Every one of the 36 Raze-2-specific sound effects is **missing as an asset** — the port never
-   extracted `2114-2145`/`35/36/39/40/41` from `raze-2.swf`'s `sounds/` folder into
-   `public/assets/sounds/`, so all weapon fire, reload, headshot, pickup, and UI-click audio in
-   the Raze 2 mode is either borrowed from the unrelated Raze 1 game or synthesized from scratch.
-2. Distinct UI feedback (`S_Click`, `S_ClickGo`, `S_ClickBack`, `S_Equip`, `S_Error`) is collapsed
-   to one generic `"Beep"` — errors, confirms, and back-navigation all sound identical.
-3. Ability/pickup sounds (`S_Heal`, `S_Powerup`, `S_Static`, `S_Equip`) have no port implementation
-   at all for their trigger contexts (healing, shields, cloak, armor-lock, ammo pickup).
-4. Cutscene pre/post music and the HUD's manual song-browser have no port equivalent (the
-   `Cutscene` screen itself doesn't exist yet).
-5. Music crossfade (~1.2s linear fade in the original) is a hard cut in the port.
+The distinct UI stingers are **not** collapsed onto one beep any more: `R2_ClickGo` (19 call
+sites), `R2_ClickBack` (17), `R2_Error` (5) and `R2_Equip` (2) are used where the original uses
+them, and `Beep` survives only as an alias for three remaining generic sites. `S_Heal`,
+`S_Powerup` and `S_Static` are likewise wired to their trigger contexts.
+
+Both the semantic `S_*` linkage names and the legacy keys resolve, so a call site may use either.
+
+**Remaining, summarized:**
+1. Music crossfade is a hard cut rather than a ~1.2s fade.
+2. No in-match manual song-skip button.
+3. `S_CamelJizz` (a title-screen Easter egg) is extracted but has no trigger — the Easter egg
+   itself is not ported.

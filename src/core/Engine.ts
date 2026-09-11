@@ -5,6 +5,7 @@ import {
 import { Input } from "./Input";
 import { Quality } from "../state/Quality";
 import { Tween } from "./Tween";
+import { Transition, type TransitionKind } from "./Transition";
 import type { Screen, ScreenClass } from "./Screen";
 
 /**
@@ -54,10 +55,14 @@ export class Engine {
   private currentSpec: { Ctor: ScreenClass; arg?: unknown } | null = null;
   /** Pending rebuild-after-resize timer, so a drag rebuilds once at the end. */
   private rebuildTimer = 0;
+  /** `Transition.as` — the sliding/zooming snapshot pair. */
+  private transition = new Transition();
 
   private constructor(app: Application) {
     this.app = app;
     this.app.stage.addChild(this.root);
+    // Above the live screen (which is hidden mid-slide) but under the overlay.
+    this.app.stage.addChild(this.transition.view);
     this.app.stage.addChild(this.overlay);
 
     this.curtain.rect(0, 0, GAME_WIDTH, GAME_HEIGHT).fill({ color: 0x000000 });
@@ -85,6 +90,10 @@ export class Engine {
     engine.setupScaling(mount);
     Input.attach(app.canvas as unknown as HTMLElement);
     engine.startLoop();
+    // Dev-only handle so a driver can read live game state (unit positions,
+    // camera, physics) instead of inferring everything from screenshots. Vite
+    // constant-folds this away in a production build.
+    if (import.meta.env.DEV) (window as any).__raze = engine;
     return engine;
   }
 
@@ -190,6 +199,10 @@ export class Engine {
     while (this.accumulator >= MS_PER_FRAME && steps < 5) {
       this.accumulator -= MS_PER_FRAME;
       steps++;
+      // `Transition.EnterFrame` is a logic-rate step in the original, and its
+      // constants (the 0.3 ease, the flat ±5, ±0.05 a frame) only mean what
+      // they should at 30Hz.
+      this.transition.enterFrame();
       this.current?.enterFrame(1);
       Input.endFrame();
     }
@@ -204,15 +217,42 @@ export class Engine {
    * black; calling it again mid-transition simply replaces the pending screen,
    * so a double-click on a menu button can't stack two swaps.
    */
-  setScreen(ScreenCtor: ScreenClass, arg?: unknown): void {
+  setScreen(ScreenCtor: ScreenClass, arg?: unknown, kind?: TransitionKind): void {
     if (!this.current) {
       this.swapScreen(ScreenCtor, arg);
       this.fade = 1;
       this.fadeDir = -1;
       return;
     }
+    if (kind) {
+      this.slideScreen(ScreenCtor, arg, kind);
+      return;
+    }
     this.pending = { Ctor: ScreenCtor, arg };
     this.fadeDir = 1;
+  }
+
+  /**
+   * `Transition.slideLeft` and friends: snapshot the screen you are leaving,
+   * build the new one behind it, and move two stills rather than two live
+   * screens. The swap happens immediately, exactly as `MC.gotoAndStop(frame)`
+   * does in the original — the new screen is just invisible for the slide.
+   */
+  private slideScreen(ScreenCtor: ScreenClass, arg: unknown, kind: TransitionKind): void {
+    const renderer = this.app.renderer;
+    const outgoing = this.current!.view;
+    const w = renderer.width;
+    const h = renderer.height;
+    this.transition.start(
+      renderer, outgoing, kind, w, h,
+      // Two frames later the new screen has been built and laid out, so it is
+      // worth photographing. Rendering it as a render root ignores `root`
+      // being hidden, so there is nothing to toggle.
+      () => this.current!.view,
+      () => { this.root.visible = true; },
+    );
+    this.swapScreen(ScreenCtor, arg);
+    this.root.visible = false;
   }
 
   /** The swap itself, with no transition. */
@@ -242,6 +282,9 @@ export class Engine {
    */
   private relayoutScreen(): void {
     if (!this.current) return;
+    // A stage that changed shape mid-slide would be sliding stills of the old
+    // size, so drop the transition rather than finish it wrong.
+    this.transition.finish();
     if (this.current.resize) {
       this.current.resize();
       return;
@@ -262,7 +305,12 @@ export class Engine {
         this.fade = 1;
         const next = this.pending;
         this.pending = null;
-        if (next) this.swapScreen(next.Ctor, next.arg);
+        // A fade cancels any slide still in flight (and restores the screen it
+        // hid) before the swap, so the two can't both own visibility.
+        if (next) {
+          this.transition.finish();
+          this.swapScreen(next.Ctor, next.arg);
+        }
         this.fadeDir = -1;
       } else if (this.fadeDir < 0 && this.fade <= 0) {
         this.fade = 0;

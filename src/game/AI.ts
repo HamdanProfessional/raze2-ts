@@ -163,7 +163,7 @@ export class AI extends Unit {
     }
 
     this.setName(this._name);
-    this.setGun = GUN_ORDER[Math.floor(Math.random() * GUN_ORDER.length)];
+    this.setGun = this.randomOwnGun();
     this.setCostume();
   }
 
@@ -219,7 +219,7 @@ export class AI extends Unit {
     } else {
       this.nextNode = { x: this.x, y: this.y, reached: true };
     }
-    this.setGun = GUN_ORDER[Math.floor(Math.random() * GUN_ORDER.length)];
+    this.setGun = this.randomOwnGun();
   }
 
   private nodeByName(name: string): any {
@@ -361,6 +361,18 @@ export class AI extends Unit {
         this.target = u;
       }
     }
+  }
+
+  /**
+   * A random gun from this bot's OWN rack, for the pre-combat / dry-arsenal
+   * fallback. Campaign bots carry a scripted class kit (alien guns, the zombie
+   * blood gun, the Commander's boss set), so seeding from the stock `GUN_ORDER`
+   * named a weapon they do not own and `selectGun` quietly refused it.
+   */
+  private randomOwnGun(): string {
+    const rack = this.gun?.gunOrder;
+    const pool = rack?.length ? rack : GUN_ORDER;
+    return pool[Math.floor(Math.random() * pool.length)];
   }
 
   /** Best owned, loaded weapon for the given distance (px), scored by how far
@@ -622,7 +634,8 @@ export class AI extends Unit {
     if (this.hasFlag && this.goal) {
       // Carrying the enemy flag: break contact and run home, shooting on the move.
       this.keys |= this.goal.x > this.x ? K.RIGHT : K.LEFT;
-      if (this.goal.y < this.y - 40 && !this.jumping && Math.random() < 0.1) this.doJump(true);
+      // (no "goal is above me" hop: the SWF only ever jumps from an action
+      // box or a deliberate dodge, never to climb toward a target.)
     } else if (dist > maxR) {
       this.keys |= g.x > this.x ? K.RIGHT : K.LEFT;
     } else if (dist < minR) {
@@ -645,7 +658,11 @@ export class AI extends Unit {
   private fireStep(): void {
     const g = this.target;
     const canHit = this.gun.checkUnitHit(g);
-    const shootSpd = (this.gun.curGun.AI_firePerc ?? 0.05) * this.shotChance;
+    // `AI.as:624` doubles a bot's per-frame fire chance while Rapid Fire is up,
+    // so a bot that grabs the pickup actually spends it instead of holding a
+    // buff the player never sees.
+    let shootSpd = (this.gun.curGun.AI_firePerc ?? 0.05) * this.shotChance;
+    if (this.status?.rapidTimer > 0) shootSpd *= 2;
     if (canHit && Math.random() < Math.min(1, shootSpd)) {
       this.gun.startShoot();
       if (Math.random() < 0.05) this.say(Personality.line(this.pers, "taunt"));
@@ -654,18 +671,24 @@ export class AI extends Unit {
     }
   }
 
-  /** Aim update. Non-campaign: always track the human player (lerp 0.8),
-   * ignoring `target` for aiming (AI.as:377-383). Campaign: per-unit target
-   * aim at the diff-scaled aimSpeed, else an idle look-ahead. */
+  /**
+   * Aim update (`AI.as:365-383`).
+   *
+   * The player-tracking branch is gated on `extra.aimPlayer` **only** — it is
+   * the scripted-escort override, so the instructor keeps his gun on you
+   * through the walkthrough. Everything else aims at the unit it actually
+   * acquired.
+   *
+   * This used to read `(!campaign || extra.aimPlayer)`, which turned the
+   * override on for every bot in every non-campaign match: they validated the
+   * shot against their real target in `fireStep` but aimed along a line to the
+   * human, so they fired into walls whenever the player was not in that line.
+   * That is the "bots shoot at nothing" behaviour.
+   */
   private aimStep(): void {
     const player = this.game.player as any;
-    const campaign = !!SD.matchSettings.campaign;
 
-    // A scripted escort keeps its gun on the human whatever it is fighting, so
-    // the instructor stays turned toward you through the walkthrough
-    // (AI.as:365-383). It is an aim override only — he is on your team, so it
-    // never makes him shoot you. Cleared by the mission script.
-    if ((!campaign || this.extra.aimPlayer) && player && !player.status?.dead && player !== this) {
+    if (this.extra.aimPlayer && player && !player.status?.dead && player !== this) {
       const fx = player.x + this.aimOffsetX;
       const fy = player.y - 45 + this.aimOffsetY;
       this.targAimX += (fx - this.targAimX) * 0.8;
@@ -686,6 +709,16 @@ export class AI extends Unit {
     this.aimY = this.targAimY;
   }
 
+  /**
+   * `UT.inBox` (`UT.as:192`): strictly inside, with (x, y) the box's TOP-LEFT.
+   * Reproduced exactly — the boundary being exclusive matters for the thin
+   * boxes some maps use as a trigger line rather than a volume.
+   */
+  private static inBoxAt(px: number, py: number,
+                         b: { x: number; y: number; w: number; h: number }): boolean {
+    return px > b.x && px < b.x + b.w && py > b.y && py < b.y + b.h;
+  }
+
   private patrol(): void {
     // Head for the objective (CTF flag / Domination point) when one is set and
     // no waypoint route is queued; otherwise walk the waypoint graph.
@@ -693,18 +726,30 @@ export class AI extends Unit {
     if (this.x > n.x + 5) this.keys |= K.LEFT;
     else if (this.x < n.x - 5) this.keys |= K.RIGHT;
 
-    // Waypoint jump actions (populated on levels that define jump zones).
-    // "j" = single jump (don't stack); "d" = forced/double jump.
-    if (n.actions) {
-      for (const a of n.actions) {
-        if (a.action === "j" && !this.jumping) this.doJump(true);
-        else if (a.action === "d") this.doJump(true);
+    // Authored jump zones on the node we are heading for (`AI.as:598-618`).
+    // The level designer placed these to mark exactly where the route goes up,
+    // so a bot jumps *here* and nowhere else: `j` starts a jump only from the
+    // ground, `d` fires regardless, which is what spends the double jump.
+    //
+    // There used to be a random 8%-per-frame "the next node is higher, try a
+    // jump" rule alongside this, because the port had never extracted the
+    // action boxes and bots otherwise could not climb at all. That guess is
+    // what made them hop on the spot under a ledge forever — the thing that
+    // actually looked broken. With the real zones in the map data it is gone.
+    for (const a of n.actions ?? []) {
+      if (!AI.inBoxAt(this.x, this.y, a)) continue;
+      if (a.action === "j") {
+        if (!this.jumping) this.doJump(true);
+      } else if (a.action === "d") {
+        this.doJump(true);
       }
     }
-    // Climb toward a higher waypoint opportunistically, and spend the double
-    // jump once the first one has topped out — without it a bot can never
-    // follow a route whose next node is more than one hop above it.
-    if (n.y < this.y - 20) {
+
+    // Levels with no authored graph (the Raze 1 maps, whose `wayNodes` is a
+    // mesh over spawn points) have no jump zones either, so there the guess is
+    // still the only way up and is kept. It is deliberately NOT used where real
+    // zones exist — that was the stuck-jumping.
+    if (!this.game.arena.authoredWaypoints && n.y < this.y - 20) {
       if (!this.jumping && Math.random() < 0.08) this.doJump(true);
       else if (this.jumping && !this.jumping.dJump && this.jumping.vel > -2) this.doJump(true);
     }

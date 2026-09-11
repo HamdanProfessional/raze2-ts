@@ -18,10 +18,13 @@ import { AnimNoHead } from "../assets/AnimNoHead";
 import { HeadArt } from "../assets/HeadArt";
 import { SkinArt } from "../assets/SkinArt";
 import { SkinAnim } from "../assets/SkinAnim";
+import { AbilityArt } from "../assets/AbilityArt";
+import { PartArt } from "../assets/PartArt";
 import { ArmArt } from "../assets/ArmArt";
 import { ArmAnim } from "../assets/ArmAnim";
 import { PickupArt } from "../assets/PickupArt";
 import { PickupWeaponArt } from "../assets/PickupWeaponArt";
+import { FxArt } from "../assets/FxArt";
 import { installGunDrop } from "../assets/GunDrop";
 import { Parts } from "../assets/Parts";
 import { Backgrounds } from "../assets/Backgrounds";
@@ -119,10 +122,12 @@ export class LoaderScreen extends Screen {
 
     // Every loader owns its own cache and reads no other's, so they all run at
     // once — the browser stays saturated instead of idling between phases.
-    // Layered per-costume rig (PartArt) stays disabled: the runtime Pixi
-    // assembly is bugged and the baked body is the known-good path. (Data and
-    // extraction are validated; Unit.updateParts / PartFigure need fixing.)
     const jobs: Promise<unknown>[] = [
+      // Layered per-costume rig. This was disabled for a long time because the
+      // assembly was transposing the SWF matrices and mirroring every limb;
+      // fixed in Unit.updateParts / PartFigure, so body + legs customization
+      // renders for real again instead of falling back to the baked body.
+      PartArt.load(),
       Sound.loadAll(),
       Anim.load(),
       AnimNoArm.load(),
@@ -130,12 +135,19 @@ export class LoaderScreen extends Screen {
       HeadArt.load(),
       SkinArt.load(), // Raze 2 baked skin figures (customize/shop previews)
       SkinAnim.load(), // Raze 2 ANIMATED skin bakes for the live in-game unit
+      // The back-attachment slot: the equipped ability's kit, or the CTF flag
+      // while carrying one. One clip, one layer — see AbilityArt.
+      AbilityArt.load(),
       ArmArt.load(),
       // Authentic Raze 2 arms: every gun sheet plus the default skin's poses.
       // Other skins' arm sheets stream in when a unit carrying them spawns.
       ArmAnim.load(),
       PickupArt.load(),
       PickupWeaponArt.load(), // authentic weapon-pickup floater icons
+      // The BH atlas: effects with no procedural stand-in (smoke, splashes,
+      // shield break, flag reset). ~0.3 MB for the set, and any of them can
+      // fire on any level, so it is loaded once rather than per map.
+      FxArt.load(),
       Backgrounds.loadCore(), // Raze 1 level art + one thumbnail per Raze 2 map
       UiArt.loadAll(), // title / menu / play backgrounds
     ];

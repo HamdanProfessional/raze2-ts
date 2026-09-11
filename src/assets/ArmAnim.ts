@@ -137,6 +137,26 @@ export const ArmAnim = {
     loadOnce(key, skinUrl(skin, pose), skinSheets);
   },
 
+  /**
+   * Load every pose sheet for one skin up front.
+   *
+   * `ensure` only streams a pose in when a weapon first needs it, and until it
+   * lands `skinCell` draws the DEFAULT_SKIN arm over this unit's own body — so
+   * a Commander-bodied bot wears the plain Raze soldier's arms for a moment.
+   * Because the sheets are per *pose*, it recurs on every switch into a new
+   * pose group, which is what made it look like a unit's skin was changing at
+   * random rather than just loading late.
+   *
+   * A roster only holds a handful of distinct skins and the sheets are small,
+   * so front-loading all six poses per skin is cheap insurance.
+   */
+  preloadSkin(skinId: string): void {
+    if (!skinId || skinId === DEFAULT_SKIN) return;
+    for (const p of Object.keys(manifest.poses)) {
+      loadOnce(`${skinId}/${p}`, skinUrl(skinId, p), skinSheets);
+    }
+  },
+
   /** The weapon's gun art for a 0-based band cell. */
   gunCell(weaponId: string, cell: number): Texture | null {
     const pose = this.pose(weaponId);

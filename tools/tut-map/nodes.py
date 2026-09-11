@@ -16,7 +16,14 @@ the identity, so Arena-local coordinates are already world/mask coordinates.
 import os, sys, json, zlib, struct, zipfile
 
 SC = os.path.dirname(os.path.abspath(__file__))
-ZIP = os.path.normpath(os.path.join(SC, "..", "..", "..", "raze 2.zip"))
+# The FFDec export archive. It moved into decompiled_swf/ at some point; keep
+# the old location as a fallback so an older checkout still works.
+_CANDIDATES = [
+    os.path.join(SC, "..", "..", "..", "decompiled_swf", "raze 2.zip"),
+    os.path.join(SC, "..", "..", "..", "raze 2.zip"),
+]
+ZIP = next((os.path.normpath(c) for c in _CANDIDATES if os.path.exists(c)),
+           os.path.normpath(_CANDIDATES[0]))
 
 ARENA = 1341
 # Marker cids, from the `symbolClass` export.
@@ -50,17 +57,24 @@ class Bits:
         return v - (1 << n) if n and (v >> (n - 1)) else v
 
     def matrix(self):
-        """Returns (translateX, translateY) in twips; scale/rotate are skipped."""
+        """Returns (translateX, translateY, scaleX, scaleY).
+
+        Translate is in twips; scale is SWF 16.16 fixed point, so the raw
+        integer has to be divided by 65536. The AI action boxes are sized purely
+        by instance scale on a 69x69 symbol, so dropping it (as this used to)
+        makes every box the same size as every other.
+        """
+        sx = sy = 1.0
         if self.ub(1):
             n = self.ub(5)
-            self.sb(n), self.sb(n)
+            sx, sy = self.sb(n) / 65536.0, self.sb(n) / 65536.0
         if self.ub(1):
             n = self.ub(5)
-            self.sb(n), self.sb(n)
+            self.sb(n), self.sb(n)   # rotate/skew: no node uses it
         n = self.ub(5)
         x, y = self.sb(n), self.sb(n)
         self.align()
-        return x, y
+        return x, y, sx, sy
 
     def cxform(self):
         add, mult = self.ub(1), self.ub(1)
@@ -100,7 +114,10 @@ def tags(buf, pos=0, end=None):
 
 
 def place(payload, po3):
-    """Parse PlaceObject2/3 into (depth, characterId|None, name|None, xy|None)."""
+    """Parse PlaceObject2/3 into (depth, characterId|None, name|None, xywh|None).
+
+    `xywh` is (x, y, scaleX, scaleY) — position in px, scale as a multiplier.
+    """
     b = Bits(payload)
     f = b.ub(8)
     f2 = b.ub(8) if po3 else 0
@@ -152,7 +169,7 @@ def arena_frame(frame):
                 if name is not None:
                     slot[1] = name
                 if xy is not None:
-                    slot[2] = (xy[0] / 20, xy[1] / 20)
+                    slot[2] = (xy[0] / 20, xy[1] / 20, xy[2], xy[3])
             elif c == 5:
                 stage.pop(struct.unpack_from("<H", p, 2)[0], None)
             elif c == 28:
@@ -161,7 +178,9 @@ def arena_frame(frame):
         out = {}
         for _, (cid, name, xy) in sorted(stage.items()):
             if cid in KINDS and xy:
-                out.setdefault(KINDS[cid], []).append((name, round(xy[0], 1), round(xy[1], 1)))
+                out.setdefault(KINDS[cid], []).append(
+                    (name, round(xy[0], 1), round(xy[1], 1),
+                     round(xy[2], 4), round(xy[3], 4)))
         return out
     return {}
 
@@ -172,6 +191,6 @@ if __name__ == "__main__":
         print(f"--- Arena frame {f} ---")
         for kind, items in sorted(nodes.items()):
             print(f" {kind} ({len(items)}):")
-            for name, x, y in items:
-                print(f"   {name!r:28} {x:8.1f} {y:8.1f}")
-        print(json.dumps({k: [[x, y] for _, x, y in v] for k, v in nodes.items()}))
+            for name, x, y, sx, sy in items:
+                print(f"   {name!r:28} {x:8.1f} {y:8.1f}  scale {sx:6.3f} x {sy:6.3f}")
+        print(json.dumps({k: [[x, y] for _, x, y, _, _ in v] for k, v in nodes.items()}))

@@ -31,10 +31,18 @@ theme is `tutq`/`tutq2` (Toxic-styled visually per `S_MapParticles` swap to
 `§§push("test"); §§push(id); switch(§§pop()) { case §§pop(): }` — a stack-based
 no-op that never matches, so the decompiled source only shows the fallback
 `"test"` map object (`id`, `map:"test"`, `bg1:""`, `bg2:""`, `sky:""`,
-`particles:"test"`, `name:"Test Map"`, `desc:"For devs only!"`). The per-map
-`name`/`desc`/frame-key strings are **not recoverable from this decompile**;
-only the shape of the returned object (`id, map, bg1, bg2, sky, particles,
-name, desc`) and the `mapOrder` list survive.
+`particles:"test"`, `name:"Test Map"`, `desc:"For devs only!"`). Only the shape
+of the returned object (`id, map, bg1, bg2, sky, particles, name, desc`) and the
+`mapOrder` list survive **the decompiled source**.
+
+They do survive the **bytecode**, though (`tools/maps/bg_labels.py`). Each case
+in `getMap`'s ABC method body is a run of `getlocal_2 ; pushstring <value> ;
+setproperty <slot>`, and the slot number names the field — 3009 `map`, 3010
+`bg1`, 3011 `bg2`, 3012 `sky`, 3013 `particles`, 3014 `name`, 3015 `desc`.
+Reading the slot rather than guessing from adjacency is what catches the fields
+whose value is the empty string, which is how `jungle` is authored: it has **no
+`bg1` layer at all**. The recovered table is in §3.5; every bg/sky value in it
+was checked against the real frame labels, so a misread could not pass silently.
 
 What *is* recoverable, from `Arena.as:792-795` (`Arena` constructor):
 
@@ -286,16 +294,57 @@ game.bg1.y = (HEIGHT - bg1.height) * (arena.y / (HEIGHT - wall.height));
 game.bg2.x = (WIDTH  - bg2.width)  * (arena.x / (WIDTH  - wall.width));
 game.bg2.y = (HEIGHT - bg2.height) * (arena.y / (HEIGHT - wall.height));
 ```
-Both `bg1` (far layer) and `bg2` (near layer) are driven by the **same**
-ratio of camera position to world size, scaled by each layer's own oversize
-(`bgN.width/height` > screen size, so as `arena.x/y` sweeps its clamped
-range, each `bgN` sweeps the *remaining* slack in its own oversize). Because
-`bg1`/`bg2` share the formula and only differ by their own embedded art size
-(`Bg`, symbol `1365`, per §3.4), **the parallax "depth" difference between
-bg1 and bg2 comes entirely from how much bigger each layer's source art is
-than the screen** — there's no separate speed multiplier constant. `bgSky`
-is not offset at all in `EnterFrame` (it's a static full-frame backdrop
+Both layers are driven by the **same** ratio of camera position to world size,
+scaled by each layer's own oversize (`bgN.width/height` > screen size, so as
+`arena.x/y` sweeps its clamped range, each `bgN` sweeps the *remaining* slack in
+its own oversize). Because `bg1`/`bg2` share the formula and only differ by
+their own embedded art size (`Bg`, symbol `1365`, per §3.4), **the parallax
+"depth" difference between bg1 and bg2 comes entirely from how much bigger each
+layer's source art is than the screen** — there's no separate speed multiplier
+constant. `bgSky` is not offset at all in `EnterFrame` (it's a static backdrop
 behind everything, only its *frame* changes per map/`"lol cats"`).
+
+`Game.as:105-110` fixes the depth order, and it is the opposite of what the
+names suggest:
+
+```as
+bgSky = new BgSky(); addChild(bgSky);
+bg2   = new Bg();    addChild(bg2);     // FAR layer  — added first, drawn behind
+bg1   = new Bg();    addChild(bg1);     // NEAR layer — drawn in front of bg2
+arena = new Arena(this); addChild(arena);
+```
+
+So **`bg1` is the near layer**, which is why it is nearly always the bigger
+piece of art and sweeps further. (`jungle2` is the exception that proves the
+rule: its `bg1` is `dark`, a flat 801×600 backdrop with ~zero slack that simply
+does not move.)
+
+All three are constructed with **no placement**, so each clip's registration
+point sits at stage (0,0) and the art hangs off it — `bgN.x` moves the
+registration point, not the corner of the art. That offset is not small: the
+ruined-city skies overhang 134px to the left of the origin, and the `red` sky's
+actual gradient is exactly 800 wide (the stage) with the skyline silhouettes
+spilling past it on both sides. FFDec writes the offset into each frame SVG's
+root `<g transform="matrix(...)">` translate; `tools/maps/bake_bg.py` records it
+as `lx/ly` in `src/assets/bgRig.json`.
+
+### 3.5 Per-map layer assignment
+
+Recovered by `tools/maps/bg_labels.py` (§1) and checked against the frame labels
+of `DefineSprite_1365_Bg` / `DefineSprite_1421_BgSky`:
+
+| map | bg1 (near) | bg2 (far) | sky |
+|---|---|---|---|
+| jungle | *(none)* | dome | red |
+| jungle2 | dark | dome | night |
+| city | city | city2 | city |
+| desert | dunes | shipyard2 | desert |
+| ocean | oceanf | oceanb | day |
+| mines | mountainbig | mountainsmall | city |
+| mines2 | mountainbig | mountainsmall | mday |
+| space | pillars | pillarsmall | space |
+| snow | snow | snow2 | day |
+| tut / tutq | mountainbiglow | mountainsmalllow | tut |
 
 ### 3.3 Water & reflections
 
@@ -335,11 +384,18 @@ MovieClip` wrappers around embedded symbols (`Bg` = `symbol1365`, `BgSky` =
 behavior is just `gotoAndStop(frameLabel)` from `Arena`'s constructor — there
 is no per-map logic inside `Bg`/`BgSky` themselves. The exported sprite
 folders (`DefineSprite_1365_Bg`, `DefineSprite_1421_BgSky`) contain 18 and 16
-frame SVGs respectively in this decompile, consistent with one frame per
-`bg1`/`bg2` art variant and one per `sky` variant (frame *labels*, not
-indices, are what `Arena.as` actually requests, so the raw frame count alone
-doesn't disambiguate which frame is which map — not recoverable without a
-live SWF frame-label dump).
+frame SVGs respectively, one per art variant. `Arena.as` requests frame
+*labels*, not indices, and **FFDec's SVG export drops the labels** — but they
+are in the binary FrameLabel (tag 43) records, so a raw tag walk recovers the
+label→frame map without needing a live player:
+
+- `Bg` 2 `dark`, 3 `dome`, 4 `space`, 5 `city`, 6 `city2`, 7 `oceanf`,
+  8 `oceanb`, 9 `mountainbig`, 10 `mountainsmall`, 11 `dunes`, 12 `shipyard2`,
+  13 `pillars`, 14 `pillarsmall`, 15 `snow`, 16 `snow2`, 17 `mountainbiglow`,
+  18 `mountainsmalllow`.
+- `BgSky` 2 `red`, 3 `meteor`, 4 `night`, 5 `lol cats`, 6 `city`, 7 `dawn`,
+  8 `day`, 9 `mday`, 10 `desert`, 11 `space`, 12 `desert2`, 13 `nlights`,
+  14 `tut`, 15 `tut_missile`, 16 `tut_attack`.
 
 ## 4. Node classes
 
@@ -443,10 +499,19 @@ drawn when the debug flag is set.
 ### 4.7 `NodePhysBox` (symbol `581`, `scripts/NodePhysBox.as`)
 - `extends Sprite`, always `visible=false` — purely a placement marker.
   `Arena.init()` collects every instance into `arena.physboxes` and hands the
-  whole array to `game.physWorld.generateWorld(physboxes)`
-  (`Arena.as:1011`) — i.e. each `NodePhysBox` marks where the Box2D world
-  should spawn a destructible/dynamic physics prop (crate, barrel, etc.); the
-  actual prop generation logic lives in `physWorld` (not in this file set).
+  whole array to `game.physWorld.generateWorld(physboxes)` (`Arena.as:1011`).
+- **These are not props.** `PhysWorld.generateWorld` (`PhysWorld.as:73-99`) walks
+  the array and, for each marker, creates a **static** Box2D body — a `b2BodyDef`
+  with no type set (so `b2_staticBody`), `SetAsBox(width/60, height/60)`,
+  `friction 0.3`, **`density = 0`** — reusing the marker's own rotation. Nothing
+  is drawn and nothing is spawned; the boxes are the invisible collision world
+  that **ragdolls** fall onto (`createCorpse` → `PhysActor`), which is the only
+  thing the Box2D world is used for. A map with no `NodePhysBox` markers simply
+  has corpses that pass through its geometry.
+
+  *(An earlier revision of this doc guessed these spawned "destructible/dynamic
+  physics props (crate, barrel, etc.)". They do not — the class sets
+  `visible = false` and the bodies are static and massless.)*
 
 ## 5. Particle systems per map theme (`Stats_MapParticles.as`)
 
@@ -502,14 +567,19 @@ case) — a low-end-hardware graphics setting, not a per-map value.
 |---|---|---|
 | Map roster / ids | Wrong-incomplete | Port's `LEVELS` (`src/game/Arena.ts:101-121`) lists all 10 base ids as `r2_<id>` but **omits `city2`/`desert2`/`ocean2`/`space2`/`snow2`/`tutq2`** entirely — only `jungle2`/`mines2` are present, matching what's in `raze2maps.json`. |
 | Per-map geometry (spawns/CTF/hold/pickups) | Correct (for the 10 present ids) | `raze2maps.json` + `Arena.buildRaze2Map()` faithfully places spawns, CTF stands (leftmost=team1 by x-sort, matching the `id__team` convention closely enough), hold points, and pickups from extracted node data. |
-| Wall collision model | Wrong-incomplete | Port uses a binary PNG alpha mask (`WallMask`, alpha>128=solid) — a reasonable **approximation** of the authentic alpha=`ff` `hitTest`, but it **drops the entire color-keyed terrain-effect layer** (§2.3): no mud/ice/snow/sand friction changes, no water/toxic/lava zones, no conveyor belts, no instant-death or damage-over-time strips, no low-gravity zones. Only solid/non-solid survives. |
+| Wall collision model | Correct | Binary alpha mask for solidity plus a second colour-keyed `<map>_special.png` layer decoded by `SURFACE_TABLE` (`WallMask.ts:58-87`), which carries the whole §2.3 vocabulary: mud/ice/snow/sand friction, low-gravity, shallow/deep water, toxic, both conveyor directions, instant-death and damage-over-time strips, the 9 straight jump-pad tiers and 5 diagonal ones. |
 | Jump pads — geometry | Correct-ish | `raze2maps.json`'s `jumpPads: [x,y,w,h]` bands look like they were extracted from exactly the `00fffN`/`00ccfN` colored regions in `wallMC` (§2.3), giving the port real pad rectangles per map. |
-| Jump pads — launch force | Wrong-incomplete | Port hardcodes a single `power` per pad type (`Arena.ts:216-219`: `power ?? 2.3` for `LevelDef` pads, `Arena.ts:306-309`: flat `power: 2.0` for **every** Raze‑2 pad) and applies `vel = -15 * power` (`Unit.ts:1193`, using `15` not the authentic `yJump=13`). Authentic pads have **9 discrete tiers** (`modJump` 1.2→3.3) plus **5 diagonal variants** with a hard horizontal `modSideJump` (-55..55) and sometimes `modBrake=3` — none of that tiering or diagonal kick exists in the port; every Raze‑2 pad currently launches identically straight up. |
-| Jump pads — activation | Wrong | Port auto-launches any grounded unit standing in the pad rect (`Unit.ts:1190-1197`, no jump-key check). Authentic behavior **requires an active jump input** while on the pad (`Movement.doJump()` only fires from `Player.as`'s jump key or an `AI.as` waypoint action-box) — walking over a pad without jumping does nothing in the original. |
+| Jump pads — launch force | Correct | The authentic tier + diagonal kick are extracted from the `00fffN`/`00ccfN` wall colours and carried on each pad as `power`/`dirX`. |
+| Jump pads — activation | Correct | The contact launch is gone. `modJump`/`modSideJump`/`modMegaJump` are surface mods spent *inside* the jump (`Movement.as:128-165`), so a pad only fires when you jump on it. The bot-only contact launch survives solely on the Raze‑1 rect levels, which have no authored `NodeAiAction` graph to jump from. |
 | Jump pads — as a class | N/A (correct in spirit) | There is no dedicated pad sprite/node in the source (they're wall-color regions, §2.3); the port's separate `JumpPad` visual (`Arena.ts` `drawPads()`) is a reasonable authored stand-in since the original pads are invisible collision-only color zones with no unique on-screen sprite of their own (visual cue was presumably baked into the `wallMC`/background art itself). |
-| Parallax bg1/bg2/sky | Missing | Port's Raze‑2 path (`buildRaze2Map`) draws one static background sprite plus a procedural gradient `skyFill()` (`Arena.ts:346-371`) — there is no `bg1`/`bg2` two-layer parallax and no camera-driven offset formula (§3.2) at all for Raze‑2 maps; Raze‑1 authentic levels (`buildFromData`) similarly show a single background with no separate sky layer. |
-| Water / reflections | Missing | No equivalent of `refData1`/`refData2` live mirrored reflection rendering, no water wave simulation (`game.water`), no puddle/lens bobbing reflection anywhere in the port. |
+| Parallax bg1/bg2/sky | Correct | `Arena.buildBackdrop()` builds all three authentic layers in the `Game.as` depth order and `updateBackdrop()` runs §3.2's formula verbatim, including the registration-point offset. Art is baked by `tools/maps/bake_bg.py` and scaled by `max(WIDTH/800, HEIGHT/600)` so the 800-wide sky gradient still reaches both edges of this port's wider viewport. The procedural gradient survives only as the fallback for the Raze‑1 rect levels, which have no authored layers. |
+| Water — wave surface | Correct | `game/Water.ts` is the spring-mass surface verbatim: one dot per 20px, spring 5 / damping 1.05 / spread 0.7, the same unit-interaction ladder (falling in kicks 4, rising −5, wading spreads to the neighbours at −2/−1, a still crouch 0.5), the 20-frame idle pulse and the `hard-light` draw. The pool comes from the author's own `waterMC` rather than the mask, so ocean simulates the thin sea-floor strip the SWF does instead of the whole blue mass, which is map art. |
+| Water / reflections | Correct | `game/Reflection.ts` ports `Arena.doReflections`: the author's `reflectTake1` rectangle is captured into a `RenderTexture` each frame (actor and effect layers only — never the map art or backdrop) and redrawn at `reflectShow1`'s own transform. Both rectangles are extracted by `tools/maps/arena_clips.py`; among the shipped maps only snow has a pair. Gated on "Lights & Reflections" (`Quality.glow`), which now also gates the shimmer only where there is no simulated surface. |
 | CTF flag capture mechanics | Partially covered elsewhere | Node placement is correct (this doc's scope); flag pickup/capture/score logic (§4.2) lives in gameplay code outside `Arena.ts` — not verified here. |
 | Hold-point (Domination) capture animation | Unknown/not verified here | The gradual gear-spin/flag-slide contest mechanic (§4.6) wasn't checked against the port's Domination mode implementation (out of this doc's file scope). |
-| Ambient particle systems per map | Missing | No equivalent of `Stats_MapParticles`' per-map fairy/fish/ember/snow/leaf ambient loops found in the Raze‑2 Arena code reviewed. |
-| AI jump-action boxes (`NodeAiAction`) | Missing | Port has no waypoint/action-box graph for Raze‑2 maps (`wayNodes` is a flat fully-connected spawn-point graph, `Arena.ts:327-333`, `actions: []` always empty) — bots have no scripted "jump here" cues, relying entirely on the auto-launch pad behavior above to cross pad gaps. |
+| Ambient particle systems per map | Correct (art pending) | The invented dust/ember/snow/bubble themes are gone. `game/mapEmitters.ts` is `Stats_MapParticles` transcribed — every `mapInit` placement (21 fairies + 16 fish on jungle, 35 fairies on jungle2, 15 fish on ocean) and every per-frame emitter, including the `case 2` fall-through that gives jungle jungle2's vents as well as its own waterfalls. `game/MapParticles.ts` is `Particle.as`: all eight kinds, the wall-mask `hitTest`, the `onScreen(300)` spawn gate, and `SD.graphPart` used as the literal loop bound / modulus it is. The pre-baked `BH` sprite frames are not extracted yet, so each kind is drawn as a matching procedural shape. |
+| AI jump-action boxes (`NodeAiAction`) | Correct | All 186 waypoints + 262 action boxes are extracted per map into `raze2maps.json`; `AI.patrol` fires `j`/`d` only inside a box, exactly as `AI.as:598-618` does, and `Arena.authoredWaypoints` reports which maps have a real graph. |
+| Ragdoll evaporation (`PhysVap`) | Correct | `physics/PhysVap.ts` ports it whole: at four seconds (`PhysActor.EnterFrame`, `fc == 4*30`) the corpse is rasterised into one shared 100x100 bitmap anchored on the torso, its bodies are dropped, and 40 random pixels lift off per frame at `rand(2,7)` px until each has risen `rand(5,30)`. One corpse at a time; queued ones that leave the view are destroyed with no effect. The "Ragdoll evaporating" toggle is now a real `SD.graphRagev` / `Quality.ragev`. Pixi ships no `GlowFilter`, so the `0xFF6600` glow is a blurred tinted copy under the sharp one, per the port's existing effect convention. |
+| Authored animated props | Correct for `tut`, missing elsewhere | A map's Arena frame carries live MovieClips alongside the nodes, and the port — whose map art is one baked PNG — drew **none** of them. `tools/maps/arena_props.py` walks `DefineSprite_1341_Arena` and resolves every placement through SymbolClass; `tools/maps/bake_props.py` renders each clip's FFDec frame SVGs, trims and shelf-packs them into `public/assets/props/` with `src/assets/propRig.json`. `game/MapProps.ts` is a minimal MovieClip (playhead + authored stops + loop range) so the mission script can use the source's own verbs. **The depth split is the load-bearing detail**: `midCont` — what `Game.as:152` fills with the units, bullets and physics world — sits at depth 1663, and `tut`'s props straddle it, so the bridges/heart/arrow (depths 2..189) draw behind the player and the conveyor treads, gears and lights (1667..1788) draw in front of him. `tut` has all 28; **`city` (1+3), `desert` (8+2), `ocean` (2+2), `mines` (12+13), `space` (9) are still unbaked** — see the follow-up task. `Tutorial_Wall` (cid 1331) is deliberately excluded: it is `visible=false` and is the collision layer, not art. |
+| Tutorial prop cues | Correct | `Game.tutBombHit` and `Game.tutShootWall` are reproduced in `game/Tutorial.ts`: the strike plays `bridge`+`bridge2`, sends the heart to its `dance` label, stops all 5 gears and 8 treads for good, and swaps the sky to `tut_attack` (`Game.as:554`, the only runtime `bgSky.gotoAndStop` in the game besides the "lol cats" override — `Arena.setSky`). Step 8 hides the nav arrow and starts `bridge2`+`bridge3`; step 9 finishes `bridge3`. Each `play()` runs to exactly the next authored stop — verified live halting on 21 / 36 / 60 / 90. |
+| Ragdoll collision (`NodePhysBox`) | Correct | Was silently broken: Raze 2 maps leave `Arena.walls` empty (live units use the pixel mask), so the corpse world had no ground at all and every ragdoll and dropped gun free-fell out of the level. `tools/maps/physboxes.py` extracts the authored boxes — 57 jungle, 29 mines, 7 snow, none elsewhere, exactly as the SWF has them — and `Arena.corpseGeometry` hands those to `Phys` instead of `walls`. |

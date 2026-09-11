@@ -91,12 +91,18 @@ for (const a of R2_ACHIEVEMENTS as Array<{
   MEDALS[a.id] = { name: a.name, desc: a.desc, icon: 12, rew: a.rew };
 }
 
+/** The ten Raze 2 achievement keys, in `Stats_Achievements.achOrder`. The menu
+ *  lists all ten whether earned or not — a locked row's description is the only
+ *  hint the player gets for the four secrets, so the list is not filtered. */
+export const R2_ACH_IDS: readonly string[] =
+  (R2_ACHIEVEMENTS as Array<{ id: string }>).map((a) => a.id);
+
 // Ordered list used by the medals menu. Note: matches getName() in the original,
 // which omits "railgun". The Raze 2 achievements follow the Raze 1 set.
 const NAMES = [
   "rank", "nodie", "human", "alien", "headshot", "addicted",
   "pistol", "gravekill", "guns", "return",
-  ...(R2_ACHIEVEMENTS as Array<{ id: string }>).map((a) => a.id),
+  ...R2_ACH_IDS,
   "complete",
 ];
 

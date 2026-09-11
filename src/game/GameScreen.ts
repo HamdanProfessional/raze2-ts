@@ -126,6 +126,8 @@ interface Tracer {
  * sustained fire doesn't leave the screen permanently red.
  */
 const HIT_FLASH_FRAMES = 12;
+/** `whiteFlash_139` runs 30 frames and stops — one second at the SWF's 30fps. */
+const WHITE_FLASH_FRAMES = 30;
 
 /**
  * How much of the camera's motion the backdrop follows: 0 = welded to the
@@ -172,6 +174,17 @@ const SHAKE_DECAY = 0.2;
 
 /** Seconds the mission briefing holds before the scripted dialogue opens. */
 const CAMP_BRIEF_HOLD = 9;
+
+/** Mission numbers of the two campaign finales (1-15 Human, 16-30 Alien), the
+ *  only missions the original puts on a clock. */
+const HUMAN_FINALE = 15;
+const ALIEN_FINALE = 30;
+/** `Hud.as:652,656`: the warning line at 30*4*60 and the forced loss 30*5
+ *  frames later. */
+const CAMP_FINALE_WARN = 4 * 60 * FPS;
+const CAMP_FINALE_END = CAMP_FINALE_WARN + 5 * FPS;
+/** `setCampMsg(..., 6)` — both finale lines hold for six seconds. */
+const CAMP_FINALE_HOLD = 6;
 /** ...or, on a mission with no briefing, the silence before its first line.
  *  Human 1's first line is at `fc==60`, the earliest any mission speaks. */
 const CAMP_LEAD_IN = 2;
@@ -265,8 +278,9 @@ export class GameScreen extends Screen {
   /** Holder the live scoreboard is rebuilt into each time it is shown. */
   private pauseScoreHolder!: Container;
   /** "Pause Blur" option (doc 14 §4): blur/darken the frozen game behind the
-   * menu. Honoured live from the in-match Options toggle. */
-  private pauseBlur = true;
+   * menu. Seeded from the persisted setting and honoured live from the
+   * in-match Options toggle. */
+  private pauseBlur = SD.pauseBlur;
   private pauseBlurFilter: BlurFilter | null = null;
   private crosshair!: Crosshair;
   /** Transient "SCREENSHOT MODE" toast — lives outside the HUD so it is still
@@ -290,6 +304,11 @@ export class GameScreen extends Screen {
   private tracers: Tracer[] = [];
   /** Red "you are being hit" vignette, drawn over the arena but under the HUD. */
   private damageFlash = new Graphics();
+  /** Scripted white-out (the tutorial's missile strike). Separate from the
+   *  damage vignette: it is a story beat, not a health cue, so "Bloody Screen"
+   *  does not silence it. */
+  private whiteFlash = new Graphics();
+  private whiteFlashTicks = 0;
   private hitFlash = 0;
   private hitFlashPeak = 0;
   /** Frames of warm-up left before the match goes live. Read by the HUD. */
@@ -439,6 +458,7 @@ export class GameScreen extends Screen {
     // Above the arena, below the HUD: the vignette must not obscure the bars
     // the player is checking *because* they just got shot.
     this.view.addChild(this.damageFlash);
+    this.view.addChild(this.whiteFlash);
     this.view.addChild(this.hud.view);
     this.buildPauseOverlay();
 
@@ -571,7 +591,15 @@ export class GameScreen extends Screen {
 
   private initialize(): void {
     const m = SD.matchSettings;
-    this.rdPhys = new Phys(this.arena.walls);
+    this.rdPhys = new Phys(this.arena.corpseGeometry);
+    // PhysVap rasterises a corpse through the renderer, and drops queued ones
+    // that have left the view — both need a handle the physics world can't
+    // reach on its own.
+    this.rdPhys.vap.renderer = (this.engine as any).app?.renderer ?? null;
+    this.rdPhys.arena = this.arena;
+    // Waterfall droplets and landing snowflakes throw the same little splash
+    // the SWF fires from `Particle.EnterFrame`.
+    this.arena.onSplash = (x, y) => this.addEffect(x, y, "snow_splash");
     // "Moon Corpses" special mode (doc 11 §2.1): drop the ragdoll world's
     // gravity from the default 10 to 2 so corpses flail and drift like they're
     // on the moon. Only the death/ragdoll physics world is affected — live-unit
@@ -584,6 +612,11 @@ export class GameScreen extends Screen {
     this.arena.view.addChild(this.rdPhys.view);
     this.arena.view.addChild(this.unitLayer);
     this.arena.view.addChild(this.fxFront);
+
+    // The map props the author put ABOVE `midCont` — the tut map's conveyor
+    // machinery and lights, which the player runs behind. Everything in this
+    // block above is what the SWF packs into `midCont` itself.
+    if (this.arena.props?.count) this.arena.view.addChild(this.arena.props.front);
 
     if (this.netRole === "off") this.buildRosterLocal();
     else if (this.netRole === "host") this.buildRosterHost();
@@ -676,6 +709,35 @@ export class GameScreen extends Screen {
     const msg = this.campMessages[this.campNext++];
     this.speakCampMsg(this.campNext - 1);
     this.campWait = Math.round(msg.hold * FPS);
+  }
+
+  /**
+   * `Hud.as:648-676`: mission 15 of either campaign runs on a hard clock.
+   *
+   * At 4:00 the last line plays — Dani on the Human side, the player himself on
+   * the Alien side — and at 4:05 the mission is **lost outright** regardless of
+   * score. The port had no match clock wired to anything, so both campaign
+   * finales could be taken at leisure; the meteor never landed.
+   */
+  private tickCampaignTimeout(): void {
+    const num = Number(SD.matchSettings?.campaign ?? 0);
+    if (num !== HUMAN_FINALE && num !== ALIEN_FINALE) return;
+    const t = this.hud.gameTime;
+    if (t === CAMP_FINALE_WARN) {
+      if (num === HUMAN_FINALE) {
+        this.hud.setCampMsg?.("girl", "Dani", "Sir, we're too late...", CAMP_FINALE_HOLD);
+      } else {
+        // `units[0]` is the player, so the Alien side's line is his own.
+        this.hud.setCampMsg?.(
+          SD.profile.prof_skin ?? null,
+          SD.profile.name,
+          "Time is up comrads, we are all doomed...",
+          CAMP_FINALE_HOLD,
+        );
+      }
+    } else if (t >= CAMP_FINALE_END) {
+      this.endGame(false);
+    }
   }
 
   /** Apply one `runScripts` branch. */
@@ -793,8 +855,21 @@ export class GameScreen extends Screen {
           this.campNoAmmo = true;
           this.player.gun.emptyAll();
         }
+        // Which roster slots does this mission's script actually call in? A bot
+        // parked by `noSpawn` sits off-map until a cue spawns it, so if no cue
+        // names its slot — because that mission's `runScripts` branch has not
+        // been transcribed — it would wait out the whole match and the mission
+        // would field a fraction of its roster. Those bots open normally
+        // instead: less faithful than the scripted entrance, but playable.
+        const scripted = new Set<number>();
+        for (const cue of getCampaignScript(num)?.cues ?? []) {
+          for (const sp of cue.spawn ?? []) scripted.add(sp.unit);
+        }
+
         entry.ai.forEach((a, i) => {
           const team = teamMatch ? (a.team === 1 ? 1 : 2) : 0;
+          // Roster slots are 1-based in the scripts (slot 0 is the human).
+          const parked = !!a.noSpawn && scripted.has(i + 1);
           const extra: any = {
             preset: a.preset ?? Math.floor(Math.random() * 20 + 1),
             pers: a.pers,
@@ -804,10 +879,16 @@ export class GameScreen extends Screen {
             // Scripted staging: where the unit opens, whether it opens at all,
             // and the escort locks the script releases later.
             spawn: a.spawn,
-            noSpawn: a.noSpawn,
+            noSpawn: parked,
             speak: a.speak,
             aimPlayer: a.aimPlayer,
           };
+          // The mission's class kit: a 7-slot tier array Guns resolves into one
+          // real gun per category, plus the passive equipment that goes with it.
+          // Without these a scripted zombie/alien/Commander spawned carrying the
+          // stock arsenal, since the kit name never matched a weapon id.
+          if (a.weapons) extra.weapons = a.weapons;
+          if (a.equips && Object.keys(a.equips).length) extra.equips = a.equips;
           if (a.gun && WEAPONS[a.gun]) extra.gun = a.gun;
           if (a.ability) extra.ability = a.ability;
           const ai = new AI(this, team, extra);
@@ -1050,6 +1131,31 @@ export class GameScreen extends Screen {
 
   addEffect(x: number, y: number, type: string, color?: number, angleDeg?: number): void {
     this.pushFx(createEffect(type, color, angleDeg), x, y, FX_BEHIND.has(type));
+  }
+
+  /**
+   * What the ground throws up where a round landed — the surface switch in
+   * `Bullet.as:425-470`, on top of the weapon's own impact spark. Soft surfaces
+   * only; anything else is hard cover and gets sparks alone.
+   *
+   * Mud/snow/sand are gated on `SD.graphPart`, foliage is not: the leaf burst is
+   * also the feedback for the shot counting toward "I hate nature!", so muting
+   * it would make the achievement invisible on the Low particle setting.
+   *
+   * `type` is optional so a caller that already sampled the surface (the hitscan
+   * path needs it for the achievement checks) does not pay for a second lookup.
+   */
+  addSurfaceSplash(x: number, y: number, type?: string): void {
+    const t = type ?? this.arena.wallMask?.surfaceTypeAt(x, y)?.type;
+    if (!t) return;
+    if (t === "foliage") {
+      this.addEffect(x, y, "leaf_splash");
+      return;
+    }
+    if (!SD.graphPart) return;
+    if (t === "mud") this.addEffect(x, y, "mud_splash");
+    else if (t === "snow") this.addEffect(x, y, "snow_splash");
+    else if (t === "sand") this.addEffect(x, y, "sand_splash");
   }
 
   /**
@@ -1429,7 +1535,39 @@ export class GameScreen extends Screen {
     this.hud.relayout();
   }
 
+  /**
+   * `Raze2_fla.whiteFlash_139`: a full-screen white rectangle that plays once
+   * over 30 frames and stops. In the SWF it lives on the `tut_attack` sky frame,
+   * which is why baking that frame statically used to leave the tutorial's sky
+   * permanently white — the flash is a one-second event, not scenery.
+   */
+  flashWhite(ticks = WHITE_FLASH_FRAMES): void {
+    this.whiteFlashTicks = Math.max(this.whiteFlashTicks, ticks);
+  }
+
+  private updateWhiteFlash(): void {
+    if (this.whiteFlashTicks <= 0) return;
+    this.whiteFlashTicks--;
+    const g = this.whiteFlash;
+    g.clear();
+    if (this.whiteFlashTicks <= 0) return;
+    g.rect(0, 0, GAME_WIDTH, GAME_HEIGHT).fill({
+      color: 0xffffff,
+      alpha: this.whiteFlashTicks / WHITE_FLASH_FRAMES,
+    });
+  }
+
   private updateHitFlash(): void {
+    // "Bloody Screen" off means no damage vignette at all — clear any frame
+    // that is still up rather than freezing it on screen.
+    if (!SD.graphBlood) {
+      if (this.hitFlash > 0) {
+        this.hitFlash = 0;
+        this.hitFlashPeak = 0;
+        this.damageFlash.clear();
+      }
+      return;
+    }
     if (this.hitFlash <= 0) return;
     this.hitFlash--;
     const k = this.hitFlash / HIT_FLASH_FRAMES;
@@ -1484,6 +1622,7 @@ export class GameScreen extends Screen {
       this.drawTracer(tr, k * k);
     }
     this.updateHitFlash();
+    this.updateWhiteFlash();
   }
 
   /**
@@ -1687,6 +1826,7 @@ export class GameScreen extends Screen {
     this.addPauseToggle(options, "Pause Blur", ox, oy, ["Off", "On"],
       this.pauseBlur ? 1 : 0, (i) => {
         this.pauseBlur = i === 1;
+        SD.setPauseBlur(this.pauseBlur);
         this.applyPauseBlur(SD.paused && this.pauseBlur);
       });
 
@@ -1821,7 +1961,7 @@ export class GameScreen extends Screen {
     }
     const filters = on && this.pauseBlurFilter ? [this.pauseBlurFilter] : [];
     const layers: (Container | Sprite | null)[] = [
-      this.bgSprite, this.arena.view, this.damageFlash, this.hud.view,
+      this.bgSprite, this.arena.view, this.damageFlash, this.whiteFlash, this.hud.view,
     ];
     for (const l of layers) if (l) l.filters = filters;
   }
@@ -2043,6 +2183,15 @@ export class GameScreen extends Screen {
         this.clientTick();
       } else {
       for (const u of this.units) {
+        // Arena containment first, where `Unit.as:577` does it — at the top of
+        // the unit's frame, so anything that ended last tick outside the box
+        // dies before it moves again. It lives here rather than in
+        // `Unit.EnterFrame` because Player / AI / NetPlayer all override that
+        // without chaining to super.
+        if (!u.status.dead) u.containInArena();
+        // Runs dead or alive: it is only the multikill window closing, and the
+        // original ticks it from `Score.EnterFrame` regardless of state.
+        u.score.enterFrame();
         if (!u.status.dead) {
           u.EnterFrame();
           u.gun.enterFrame();
@@ -2058,6 +2207,9 @@ export class GameScreen extends Screen {
       for (const p of this.arena.itemPickups) p.enterFrame();
       for (const p of this.arena.weapPickups) p.enterFrame();
       this.arena.enterFrame(); // animated hazards / jump pads
+      // The wave surface reads every unit's position and velocity, so it ticks
+      // here rather than inside the arena (`Game.EnterFrame` -> `water.EnterFrame`).
+      this.arena.water?.enterFrame(this.units as any);
       for (const u of this.units) {
         if (u.status.dead) continue;
         for (const p of this.arena.itemPickups) p.tryTouch(u as any);
@@ -2070,6 +2222,7 @@ export class GameScreen extends Screen {
         this.objectives?.enterFrame();
         this.tutorial?.enterFrame();
         this.tickCampaignDialogue();
+        this.tickCampaignTimeout();
       }
       this.match.enterFrame();
       this.updateFx();
@@ -2084,6 +2237,14 @@ export class GameScreen extends Screen {
     // Redrawn after the world has moved, and outside the !paused block so the
     // boxes can be inspected frozen. Cheap no-op while the toggle is off.
     this.drawHitboxes();
+
+    // Re-capture the authored reflection window last, once everything it
+    // reflects has settled for the frame (`Arena.doReflections` is likewise the
+    // tail of the arena's EnterFrame). Only the maps with one pay for it.
+    this.arena.reflection?.update(
+      (this.engine as any).app?.renderer,
+      [this.fxBehind, this.rdPhys.view, this.unitLayer, this.fxFront],
+    );
 
     this.hud.enterFrame();
   }
@@ -2123,6 +2284,13 @@ export class GameScreen extends Screen {
       g.rect(w.x - w.width / 2, w.y - w.height / 2, w.width, w.height);
     }
     g.stroke({ color: 0xff3333, width: 1, alpha: 0.5 });
+
+    // Fitted walkable diagonals (green), drawn over the rects they replace so
+    // it is obvious at a glance which staircases are being ridden as slopes.
+    if (this.arena.slopes.length) {
+      for (const s of this.arena.slopes) g.moveTo(s.x0, s.y0).lineTo(s.x1, s.y1);
+      g.stroke({ color: 0x33ff88, width: 2, alpha: 0.9 });
+    }
 
     // Pixel-mask maps (Raze 2) collide against a silhouette, not rects — so
     // there are no wall boxes above. Draw the mask itself as a pixel-perfect
@@ -2187,7 +2355,10 @@ export class GameScreen extends Screen {
     g.stroke({ color: 0xffaa22, width: 2, alpha: 0.6 });
 
     this.hitboxLabel.visible = true;
-    const geo = this.arena.wallMask ? "mask" : `walls ${this.arena.walls.length}`;
+    const geo = this.arena.wallMask
+      ? "mask"
+      : `walls ${this.arena.walls.length}` +
+        (this.arena.slopes.length ? ` slopes ${this.arena.slopes.length}` : "");
     this.hitboxLabel.text =
       `HITBOXES: ON  units ${units}  ${geo}` +
       `  pickups ${pickups}  bodies ${bodies}`;

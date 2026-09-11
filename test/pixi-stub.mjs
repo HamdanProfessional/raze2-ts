@@ -7,6 +7,7 @@ class Node {
     this.scale = { x: 1, y: 1, set(x, y) { this.x = x; this.y = y ?? x; } };
     this.position = { set: (x, y) => { this.x = x; this.y = y; } };
     this.pivot = { x: 0, y: 0, set(x, y) { this.x = x; this.y = y ?? x; } };
+    this.skew = { x: 0, y: 0, set(x, y) { this.x = x; this.y = y ?? x; } };
     this.anchor = { x: 0, y: 0, set(x, y) { this.x = x; this.y = y ?? x; } };
     // Local drawing extent, accumulated from the geometry calls below so the
     // layout audit (test/layoutcheck.ts) can measure a screen without a
@@ -22,6 +23,27 @@ class Node {
       b.x1 = Math.max(b.x1, x1); b.y1 = Math.max(b.y1, y1);
     }
     return this;
+  }
+  /** Pixi's Container.setFromMatrix — decomposed the same way Matrix.decompose
+   *  does, so a rotated-and-mirrored placement lands on skew rather than being
+   *  quietly flattened to a scale. */
+  setFromMatrix(m) {
+    const { a, b, c, d } = m;
+    const skewX = -Math.atan2(-c, d);
+    const skewY = Math.atan2(b, a);
+    const delta = Math.abs(skewX + skewY);
+    if (delta < 1e-5 || Math.abs(Math.PI * 2 - delta) < 1e-5) {
+      this.rotation = skewY;
+      this.skew.x = this.skew.y = 0;
+    } else {
+      this.rotation = 0;
+      this.skew.x = skewX;
+      this.skew.y = skewY;
+    }
+    this.scale.x = Math.sqrt(a * a + b * b);
+    this.scale.y = Math.sqrt(c * c + d * d);
+    this.x = m.tx + (this.pivot.x * a + this.pivot.y * c);
+    this.y = m.ty + (this.pivot.x * b + this.pivot.y * d);
   }
   addChild(...c) { this.children.push(...c); return c[0]; }
   addChildAt(c, i = 0) { this.children.splice(i, 0, c); return c; }
@@ -46,6 +68,17 @@ class Node {
   ellipse(x = 0, y = 0, rw = 0, rh = 0) { return this.mark(x - rw, y - rh, x + rw, y + rh); }
   moveTo(x = 0, y = 0) { return this.mark(x, y, x, y); }
   lineTo(x = 0, y = 0) { return this.mark(x, y, x, y); }
+  // A quadratic never leaves the hull of its control point and endpoint, so
+  // marking both bounds it exactly enough for a layout audit.
+  quadraticCurveTo(cx = 0, cy = 0, x = 0, y = 0) {
+    return this.mark(Math.min(cx, x), Math.min(cy, y), Math.max(cx, x), Math.max(cy, y));
+  }
+  bezierCurveTo(c1x = 0, c1y = 0, c2x = 0, c2y = 0, x = 0, y = 0) {
+    return this.mark(
+      Math.min(c1x, c2x, x), Math.min(c1y, c2y, y),
+      Math.max(c1x, c2x, x), Math.max(c1y, c2y, y),
+    );
+  }
   // The arc is bounded by its control point and end point; marking both is a
   // safe over-estimate for a layout audit.
   arcTo(x1 = 0, y1 = 0, x2 = 0, y2 = 0) {
@@ -65,8 +98,31 @@ class Node {
 export class Container extends Node {}
 export class Graphics extends Node {}
 export class Texture {}
+// Render-to-texture: the headless run has no renderer, so this only has to
+// carry a size and be destroyable. `Reflection` no-ops without a renderer.
+export class RenderTexture extends Texture {
+  static create(o = {}) {
+    const t = new RenderTexture();
+    t.width = o.width ?? 1;
+    t.height = o.height ?? 1;
+    return t;
+  }
+  destroy() {}
+}
 export class Matrix {
   constructor(a = 1, b = 0, c = 0, d = 1, tx = 0, ty = 0) { Object.assign(this, { a, b, c, d, tx, ty }); }
+  translate(x = 0, y = 0) { this.tx += x; this.ty += y; return this; }
+  scale(x = 1, y = 1) { this.a *= x; this.d *= y; this.tx *= x; this.ty *= y; return this; }
+  // Post-multiply by a rotation, matching Pixi's own Matrix.rotate.
+  rotate(angle = 0) {
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    const { a, b, c, d, tx, ty } = this;
+    this.a = a * cos - b * sin; this.b = a * sin + b * cos;
+    this.c = c * cos - d * sin; this.d = c * sin + d * cos;
+    this.tx = tx * cos - ty * sin; this.ty = tx * sin + ty * cos;
+    return this;
+  }
+  identity() { return Object.assign(this, { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 }); }
 }
 export class Sprite extends Node { constructor(t) { super(); this.texture = t; this.tint = 0xffffff; } }
 export class Rectangle {

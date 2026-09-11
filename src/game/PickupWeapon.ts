@@ -63,6 +63,13 @@ function fixedFromIndex(idx: number): string {
 
 const FRAMES_PER_SEC = 30;
 
+/** How far above its stand the gun floats, and the bob around that height.
+ *  `NodePickup.EnterFrame`: `y - 40 - UT.yMoveToRot(yRot, 4)` with `yRot += 5`
+ *  each frame, i.e. a 4px swing on a 72-frame cycle. */
+const FLOAT_Y = 40;
+const BOB_AMPLITUDE = 4;
+const BOB_DEG_PER_FRAME = 5;
+
 interface UnitLike {
   x: number;
   y: number;
@@ -76,6 +83,9 @@ export class PickupWeapon {
   private respawnTicks = 0;
   private g = new Graphics();
   private icon: Sprite | null = null;
+  private base: Sprite | null = null;
+  /** `yRot`: free-running degrees driving the float bob. */
+  private bob = 0;
   private currentType = "";
   private pickedUp = false;
 
@@ -108,7 +118,14 @@ export class PickupWeapon {
   }
 
   enterFrame(): void {
-    if (!this.pickedUp || this.respawnTicks <= 0) return;
+    if (!this.pickedUp) {
+      this.bob = (this.bob + BOB_DEG_PER_FRAME) % 360;
+      if (this.icon) {
+        this.icon.y = -FLOAT_Y - Math.sin((this.bob * Math.PI) / 180) * BOB_AMPLITUDE;
+      }
+      return;
+    }
+    if (this.respawnTicks <= 0) return;
     this.respawnTicks--;
     if (this.respawnTicks === 0) {
       this.pickedUp = false;
@@ -136,18 +153,39 @@ export class PickupWeapon {
       this.icon.destroy();
       this.icon = null;
     }
-    // Authentic weapon-pickup floater icon (SWF symbol 1647) when available.
+    if (this.base) {
+      this.base.destroy();
+      this.base = null;
+    }
+    // Authentic weapon-pickup art. `NodePickup` is two things at once: the node
+    // clip is the lit STAND (`gotoAndStop(2)`, NodePickup.as:118) and the gun is
+    // painted 40px above it with a bob (`EnterFrame`'s bitscreen.paint at
+    // `y - 40 - yMoveToRot(yRot, 4)`). The port drew only the gun, lying flat on
+    // the floor — dark art on dark floor, which is why floor weapons read as
+    // not being there at all.
+    const btex = PickupWeaponArt.getBase();
+    if (btex) {
+      this.base = new Sprite(btex);
+      this.base.anchor.set(0.5, 1);
+      this.view.addChild(this.base);
+    }
     const wtex = PickupWeaponArt.getTexture(this.currentType);
     if (wtex) {
-      // Soft ground glow so the pickup reads as a collectable on the map.
-      this.g.ellipse(0, 10, 20, 6).fill({ color: 0xffcc33, alpha: 0.18 });
+      if (!btex) {
+        // No stand art: keep a soft ground glow so the pickup still reads.
+        this.g.ellipse(0, 10, 20, 6).fill({ color: 0xffcc33, alpha: 0.18 });
+      }
       this.icon = new Sprite(wtex);
       this.icon.anchor.set(0.5);
       // Size the gun so its longest side reads clearly on the map (~2x the old
       // 30px icon), keeping the aspect ratio of the authentic Raze 2 gun art.
       const s = 56 / Math.max(wtex.width || 56, wtex.height || 56);
       this.icon.scale.set(s);
-      this.g.addChild(this.icon);
+      this.icon.y = -FLOAT_Y;
+      // Onto `view`, not `g`: Pixi v8 deprecates parenting children to a
+      // Graphics. `g` is already in `view`, so the icon still lands on top of
+      // the ground glow it draws.
+      this.view.addChild(this.icon);
       return;
     }
     // Fallback: the held weapon-arm sprite on a small rack (art not loaded yet).
@@ -161,7 +199,7 @@ export class PickupWeapon {
       this.icon = new Sprite(tex);
       this.icon.anchor.set(0.5);
       this.icon.scale.set(Math.min(28 / (tex.width || 28), 10 / (tex.height || 10), 1));
-      this.g.addChild(this.icon);
+      this.view.addChild(this.icon);
     }
   }
 

@@ -1,4 +1,5 @@
-import { Container, Graphics, Text, TextStyle } from "pixi.js";
+import { Container, Graphics, Sprite, Text, TextStyle } from "pixi.js";
+import { FxArt, type FxDef } from "../assets/FxArt";
 import { Quality } from "../state/Quality";
 import { WEAPONS } from "./weapons";
 
@@ -256,6 +257,36 @@ function smokePuff(size: number, vx: number, vy: number): FxObject {
         // Fades in over the first fifth of its life, then out.
         alpha: 0.3 * Math.min(1, t * 5) * (1 - t),
       });
+      return age >= maxAge;
+    },
+  };
+}
+
+/**
+ * A flame lick from a burning unit (`fexpand`, the `fire` pseudo-gun's hit
+ * effect). Rises and narrows as it cools from white through orange to smoke.
+ * Status.burnTick spawns one every third frame somewhere on the body.
+ */
+function flameLick(): FxObject {
+  const maxAge = 14;
+  let age = 0;
+  const drift = rand(-0.6, 0.6);
+  const rise = rand(1.2, 2.2);
+  const size = rand(5, 9);
+  const view = new Container();
+  const g = new Graphics();
+  view.addChild(g);
+  return {
+    view,
+    enterFrame(): boolean {
+      age++;
+      const t = age / maxAge;
+      view.x += drift;
+      view.y -= rise * (1 - t * 0.5);
+      // White-hot core to deep orange to nothing.
+      const color = t < 0.3 ? 0xfff0c0 : t < 0.65 ? 0xffa32a : 0xd2461a;
+      g.clear();
+      g.circle(0, 0, size * (1 - t * 0.6)).fill({ color, alpha: 0.85 * (1 - t) });
       return age >= maxAge;
     },
   };
@@ -625,6 +656,96 @@ function genericRing(color: number): FxObject {
 }
 
 /**
+ * The little splash a waterfall droplet or a landing snowflake makes
+ * (`Particle.EnterFrame` fires `snow_splash` on every impact). It has to be
+ * much smaller and shorter than a weapon's ring: on a map like jungle there can
+ * be a dozen a frame, so this is a 6px crown that is gone in a fifth of a
+ * second rather than a 20px expanding hoop.
+ */
+function splashCrown(color: number): FxObject {
+  const maxAge = 6;
+  let age = 0;
+  const view = new Container();
+  const g = new Graphics();
+  view.addChild(g);
+  const drops = Array.from({ length: 3 }, () => ({
+    vx: (Math.random() - 0.5) * 3,
+    vy: -1 - Math.random() * 1.5,
+    x: 0,
+    y: 0,
+  }));
+  return {
+    view,
+    enterFrame(): boolean {
+      age++;
+      const t = age / maxAge;
+      g.clear();
+      g.circle(0, 0, 1 + t * 5).stroke({ color, width: 1, alpha: 0.7 * (1 - t) });
+      for (const d of drops) {
+        d.x += d.vx;
+        d.y += d.vy;
+        d.vy += 0.5;
+        g.circle(d.x, d.y, 0.9).fill({ color, alpha: 0.85 * (1 - t) });
+      }
+      return age >= maxAge;
+    },
+  };
+}
+
+/**
+ * Plays one effect straight out of the SWF's `BH` atlas — the port of
+ * `Effect.as`, which is the entire original effect system:
+ *
+ *     rotation = UT.irand(0, stats.rotAmt - 1);   // once, at spawn
+ *     paint(x, y, true, name, sub, frame);        // then one frame per tick
+ *     if (frame > stats.frames) remove = true;
+ *
+ * The rotation is rolled once and held, which is why two mud splashes a moment
+ * apart never look like copies of each other.
+ */
+class BitAniFx implements FxObject {
+  readonly view = new Container();
+  private spr = new Sprite();
+  private frame = 0;
+  /** `UT.irand(0, rotAmt - 1)`, chosen at spawn and fixed for the effect's life. */
+  private rot: number;
+
+  constructor(
+    private name: string,
+    private def: FxDef,
+  ) {
+    this.rot = (Math.random() * def.rotAmt) | 0;
+    this.spr.scale.set(1 / def.bakeScale);
+    // A whitened effect is a flat mask standing in for a `mult=0` colour
+    // transform, so the tint REPLACES the art's colour rather than shading it.
+    if (def.whitened) this.spr.tint = def.tint ?? 0xffffff;
+    this.view.alpha = def.alpha ?? 1;
+    this.view.addChild(this.spr);
+    this.paint();
+  }
+
+  private paint(): void {
+    const idx = this.rot * this.def.frames + this.frame;
+    const tex = FxArt.cell(this.name, idx);
+    const cell = this.def.cells[idx];
+    this.spr.visible = !!tex;
+    if (!tex || !cell) return;
+    this.spr.texture = tex;
+    // lx/ly are authored px from the point createEffect() was called at; the
+    // sprite's own scale already undoes the bake resolution.
+    this.spr.x = cell.lx;
+    this.spr.y = cell.ly;
+  }
+
+  enterFrame(): boolean {
+    this.frame++;
+    if (this.frame >= this.def.frames) return true;
+    this.paint();
+    return false;
+  }
+}
+
+/**
  * Build the effect display object for a given `wallEff`/misc effect type
  * string (as used by Guns.ts / Projectile.ts / Unit.ts / PickupItem.ts).
  * The caller is responsible for positioning `view` and adding it to a
@@ -633,8 +754,22 @@ function genericRing(color: number): FxObject {
  * `color` optionally overrides the impact tint — Guns.ts passes the firing
  * weapon's `sparkColor` so a railgun scars the wall cyan, plasma purple and a
  * rocket orange, instead of every hit looking the same.
+ *
+ * Resolution order is procedural first, then the baked `BH` atlas. The two sets
+ * are disjoint today; keeping the hand-drawn ones ahead means re-baking more of
+ * the atlas adds art without silently replacing effects that already look right.
  */
 export function createEffect(type: string, color?: number, angleDeg?: number): FxObject {
+  const drawn = procedural(type, color, angleDeg);
+  if (drawn) return drawn;
+  const def = FxArt.def(type);
+  if (def) return new BitAniFx(type, def);
+  return genericRing(0xffcc66);
+}
+
+/** The hand-drawn library. Returns null for a name it has no art for, so
+ *  `createEffect` can fall through to the baked atlas. */
+function procedural(type: string, color?: number, angleDeg?: number): FxObject | null {
   switch (type) {
     case "pistol":
       return bulletSpark(color ?? 0xfff2a0, 10, false, angleDeg);
@@ -662,6 +797,8 @@ export function createEffect(type: string, color?: number, angleDeg?: number): F
       return explosion(1.4);
     case "crit":
       return critFlash();
+    case "fexpand":
+      return flameLick();
     case "sparkRain":
       return sparkRain(color ?? 0xffe08a);
     case "spawn":
@@ -676,8 +813,10 @@ export function createEffect(type: string, color?: number, angleDeg?: number): F
       return genericRing(0xcc88ff);
     case "getInvin":
       return genericRing(0xffdd44);
+    case "snow_splash":
+      return splashCrown(color ?? 0xcceeff);
     default:
-      return genericRing(0xffcc66);
+      return null;
   }
 }
 

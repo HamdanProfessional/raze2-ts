@@ -12,7 +12,6 @@ import { equippedInSlot, equipById } from "../game/Equipment";
 import { getAbility } from "../game/Abilities";
 import { makeBackground, makeScrim } from "./ui";
 import { MenuScreen } from "./MenuScreen";
-import { CustomizeScreen } from "./CustomizeScreen";
 import { ArmoryBrowseScreen, type ArmoryMode } from "./ArmoryBrowseScreen";
 import {
   Raze2Button,
@@ -132,7 +131,7 @@ export class ArmoryScreen extends Screen {
 
     const back = this.mkButton("Back to Menu", 200, 38, () => {
       Sound.play("R2_ClickBack");
-      this.engine.setScreen(MenuScreen);
+      this.engine.setScreen(MenuScreen, undefined, "slideRight");
     });
     back.view.x = MARGIN; back.view.y = GAME_HEIGHT - 54;
     this.view.addChild(back.view);
@@ -222,7 +221,7 @@ export class ArmoryScreen extends Screen {
   }
 
   private browse(mode: ArmoryMode): void {
-    this.engine.setScreen(ArmoryBrowseScreen, mode);
+    this.engine.setScreen(ArmoryBrowseScreen, mode, "slideLeft");
   }
 
   /** One "label ....... value" slot row, with an optional leading index chip. */
@@ -279,12 +278,14 @@ export class ArmoryScreen extends Screen {
     // Sub-nav — the source's smaller-scale button column beneath the preview.
     const navY = BODY_TOP + panelH + 12;
     const navH = 30, navGap = 6;
+    // No "Profile" entry: the source's `btn_Profile` opened the head/body/legs
+    // character builder (`CustomizeScreen`), which the Skins browse supersedes
+    // here. The screen itself is kept but is currently unreachable.
     const nav: [string, () => void][] = [
       ["Weapons", () => this.browse("weapons")],
       ["Equipment", () => this.browse("equipment")],
       ["Abilities", () => this.browse("abilities")],
       ["Skins", () => this.browse("skins")],
-      ["Profile", () => this.engine.setScreen(CustomizeScreen)],
     ];
     nav.forEach(([label, action], i) => {
       const btn = this.mkButton(label, w, navH, () => { Sound.play("R2_ClickGo"); action(); });

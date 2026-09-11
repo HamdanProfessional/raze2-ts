@@ -2,14 +2,18 @@ import { Assets, Texture } from "pixi.js";
 import { ASSET_BASE } from "../core/Config";
 
 /**
- * Power-up floater icons, lifted from the SWF Pickup_Item clip (symbol 1672).
+ * Power-up floater icons, baked from the SWF by `tools/pickups/bake.py`.
  *
- * The original showed a per-type floater graphic on its own timeline frame
- * (shield / shieldBig / health / healthBig / ddamage / fade / invin). We render
- * each labelled frame, crop it to its content and store it at
- * public/assets/pickups/<kind>.png, so the floor pickup shows the authentic icon
- * instead of a placeholder disc. The Juggernaut crown has no Pickup_Item frame
- * (it is a match object, not a floor item), so it keeps its drawn glyph.
+ * `NodePickup.EnterFrame` paints each floor power-up with
+ * `bitscreen.paint(..., "pickups0", id, 1)`, and `BH.setup` builds that atlas
+ * from `DefineSprite_1719`, keying every frame by its label — the labels being
+ * the pickup ids themselves (sshield / bshield / shealth / bhealth / invin /
+ * damage / mirror / rapid). Each is cropped to content and stored at
+ * public/assets/pickups/<port kind>.png.
+ *
+ * `fade` is not in that atlas (Raze 2 has no fade pickup — cloak is an ability)
+ * and keeps its earlier art. The Juggernaut crown has no frame either — it is a
+ * match object, not a floor item — so it falls through to the drawn glyph.
  */
 
 const KINDS = [
@@ -20,6 +24,7 @@ const KINDS = [
   "ddamage",
   "fade",
   "invin",
+  "rapid",
 ] as const;
 
 const cache = new Map<string, Texture>();

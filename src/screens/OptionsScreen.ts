@@ -33,14 +33,10 @@ import {
  *   - Other Options    — Sounds, Music, Bloody Screen, Pause Blur toggles
  *     (outside the preset system, per §2.4).
  *
- * Quality and Glows bind to the real `SD.qual` / `SD.noGlow` model (and
- * Sounds/Music to `SD.sound` / `SD.music`, persisted via `SD.save()`).
- * Particles, Lights & Reflections, Ragdoll evaporating, Bloody Screen and
- * Pause Blur have no backing field in `SD.ts` yet (see doc 13 §3.2/§4 gaps
- * 4/6/7/8/9) — they're held in local instance state so the preset bulk-apply
- * and the on-screen highlight still behave correctly, but they reset to their
- * default on every re-open and don't affect gameplay. That gap is pre-existing
- * in the shared settings model and out of scope for this screen-only pass.
+ * Every toggle binds to the real persisted model: Quality/Glows/Particles/
+ * Ragdoll evaporating to `SD.qual`/`SD.noGlow`/`SD.graphPart`/`SD.graphRagev`,
+ * Sounds/Music to `SD.sound`/`SD.music`, and Bloody Screen/Pause Blur to
+ * `SD.graphBlood`/`SD.pauseBlur`. All persist through `SD.save()`.
  */
 
 /** Preset name -> blurb, exact copy from spec doc 13 §2.6 (text ids 515/517/519/521/523). */
@@ -95,11 +91,7 @@ export class OptionsScreen extends Screen {
 
   // Detail toggles without a persisted backing field yet (visual parity only,
   // see class doc comment above).
-  private particles = 2;
   private lights = 1;
-  private ragev = 1;
-  private sblood = 1;
-  private pblur = 1;
 
   constructor(...args: ConstructorParameters<typeof Screen>) {
     super(...args);
@@ -117,7 +109,7 @@ export class OptionsScreen extends Screen {
       height: 40,
       onClick: () => {
         Sound.play("R2_ClickBack");
-        this.engine.setScreen(MenuScreen);
+        this.engine.setScreen(MenuScreen, undefined, "slideRight");
       },
     });
     back.view.x = colX()[0];
@@ -269,9 +261,9 @@ export class OptionsScreen extends Screen {
       if (
         p.qual === SD.qual &&
         p.glow === !SD.noGlow &&
-        p.particles === this.particles &&
+        p.particles === SD.graphPart &&
         (p.lights ? 1 : 0) === this.lights &&
-        (p.ragev ? 1 : 0) === this.ragev
+        p.ragev === SD.graphRagev
       ) {
         return i;
       }
@@ -287,17 +279,17 @@ export class OptionsScreen extends Screen {
     Sound.play("R2_ClickGo");
     SD.setQuality(preset.qual);
     SD.setNoGlow(!preset.glow);
-    this.particles = preset.particles;
+    SD.setRagev(preset.ragev);
+    SD.setGraphPart(preset.particles);
     this.lights = preset.lights ? 1 : 0;
-    this.ragev = preset.ragev ? 1 : 0;
 
     // Reflect the bulk change in the detail toggles (setSelected doesn't
     // re-fire onChange, so this won't recursively demote back to Custom).
     this.qualityToggle.setSelected(QUALITY_LEVELS.indexOf(preset.qual));
     this.glowToggle.setSelected(preset.glow ? 1 : 0);
-    this.particlesToggle.setSelected(this.particles);
+    this.particlesToggle.setSelected(preset.particles);
     this.lightsToggle.setSelected(this.lights);
-    this.ragevToggle.setSelected(this.ragev);
+    this.ragevToggle.setSelected(preset.ragev ? 1 : 0);
 
     this.highlightActivePreset(i);
   }
@@ -343,9 +335,9 @@ export class OptionsScreen extends Screen {
 
     this.particlesToggle = this.toggleRow(
       this.view, "Particles", lx, ly, ["Low", "Medium", "High", "Ultra"],
-      this.particles,
+      SD.graphPart,
       (i) => {
-        this.particles = i;
+        SD.setGraphPart(i);
         this.demoteToCustom();
       },
     );
@@ -370,9 +362,10 @@ export class OptionsScreen extends Screen {
     ly += step;
 
     this.ragevToggle = this.toggleRow(
-      this.view, "Ragdoll evaporating", lx, ly, ["Off", "On"], this.ragev,
+      this.view, "Ragdoll evaporating", lx, ly, ["Off", "On"],
+      SD.graphRagev ? 1 : 0,
       (i) => {
-        this.ragev = i;
+        SD.setRagev(i === 1);
         this.demoteToCustom();
       },
     );
@@ -406,10 +399,12 @@ export class OptionsScreen extends Screen {
     });
     ly += step;
 
-    this.toggleRow(this.view, "Bloody Screen", lx, ly, ["Off", "On"], this.sblood, (i) => (this.sblood = i));
+    this.toggleRow(this.view, "Bloody Screen", lx, ly, ["Off", "On"],
+      SD.graphBlood ? 1 : 0, (i) => SD.setGraphBlood(i === 1));
     ly += step;
 
-    this.toggleRow(this.view, "Pause Blur", lx, ly, ["Off", "On"], this.pblur, (i) => (this.pblur = i));
+    this.toggleRow(this.view, "Pause Blur", lx, ly, ["Off", "On"],
+      SD.pauseBlur ? 1 : 0, (i) => SD.setPauseBlur(i === 1));
   }
 
   enterFrame(): void {

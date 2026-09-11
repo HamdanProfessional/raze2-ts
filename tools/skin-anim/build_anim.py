@@ -212,16 +212,25 @@ def build_sheet(skin_frame):
             f'<defs>{"".join(defs)}</defs>{"".join(body)}</svg>')
 
 import sys
-only = sys.argv[1] if len(sys.argv) > 1 else None
+argv = [a for a in sys.argv[1:]]
+# The manifest is pure geometry off the UnitMC matrices — it does not depend on
+# the sheets at all. `--manifest-only` recomputes just the JSON so an attach
+# point can be added without re-rendering all 31 skins.
+manifest_only = "--manifest-only" in argv
+argv = [a for a in argv if not a.startswith("--")]
+only = argv[0] if argv else None
 built = []
-for sk in skins:
-    if only and sk["id"] != only:
-        continue
-    svg = build_sheet(sk["frame"])
-    p = os.path.join(OUT_SVG, f'{sk["id"]}.svg')
-    open(p, "w", encoding="utf-8").write(svg)
-    built.append(sk["id"])
-print(f"built {len(built)} sheets -> {OUT_SVG}")
+if not manifest_only:
+    for sk in skins:
+        if only and sk["id"] != only:
+            continue
+        svg = build_sheet(sk["frame"])
+        p = os.path.join(OUT_SVG, f'{sk["id"]}.svg')
+        open(p, "w", encoding="utf-8").write(svg)
+        built.append(sk["id"])
+    print(f"built {len(built)} sheets -> {OUT_SVG}")
+else:
+    print("--manifest-only: skipping sheet build")
 
 # --- Manifest --------------------------------------------------------------
 # On-screen render scale. The bake is composed from the UnitMC placement
@@ -238,6 +247,29 @@ def state_shoulders(a, b):
         out.append([round(m[4], 2), round(m[5], 2)] if m else [0.0, -57.0])
     return out
 
+# The back-attachment slot (`MC.body.ability`, DefineSprite_249) is a child of
+# the *body* clip, not a UnitMC holder, so unlike arm1hold it has no matrix of
+# its own on the timeline. Inside DefineSprite_279_PhysBody it sits at a fixed
+# (-11.6, -0.1) — identical in all 200 skin frames, i.e. the slot is rigged to
+# the torso, not drawn per costume — so its clip-space placement each frame is
+# just the body matrix applied to that point. The torso also rotates up to ~15
+# degrees over the animation, and the pack has to tilt with it, so the rotation
+# is carried alongside.
+ABILITY_LOCAL = (-11.6, -0.1)
+
+def state_ability(a, b):
+    """Per-frame [x, y, rotDeg] for the back slot (clip coords, feet origin)."""
+    out = []
+    for f in range(a, b + 1):
+        m = frame_mat[f].get("body")
+        if not m:
+            out.append([0.0, -40.0, 0.0])
+            continue
+        x, y = apply(m, *ABILITY_LOCAL)
+        rot = math.degrees(math.atan2(m[1], m[0]))
+        out.append([round(x, 2), round(y, 2), round(rot, 2)])
+    return out
+
 manifest = {
     "cell": [W, H],
     "anchor": [round(ORIGIN_X / W, 5), round(ORIGIN_Y / H, 5)],
@@ -251,10 +283,13 @@ manifest = {
              "cell[w,h] with the feet/clip-origin at anchor (fraction). "
              "Body+head+legs baked; the aim arm+gun are the live rig's overlay, "
              "welded at shoulder[frame] (clip px, feet origin, y up = negative). "
+             "ability[frame] is [x, y, rotDeg] for the back slot (backpack / CTF "
+             "flag), same basis. "
              "Draw the body anchored at anchor with feet on the unit origin, "
              "scaled by scale, flipped by facing."),
     "states": {name: {"start": STATE_START[name], "count": b - a + 1,
-                      "shoulder": state_shoulders(a, b)}
+                      "shoulder": state_shoulders(a, b),
+                      "ability": state_ability(a, b)}
                for name, a, b in STATES},
     "skins": [sk["id"] for sk in skins],
 }

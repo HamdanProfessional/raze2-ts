@@ -94,6 +94,14 @@ class SDState {
   language = "English";
   medals: Record<string, any> = {};
   noGlow = false;
+  /** "Ragdoll evaporating" (`SD.graphRagev`) — corpses come apart into embers. */
+  graphRagev = true;
+  /** "Particles" 0..3 (`SD.graphPart`) — density of the per-map ambient emitters. */
+  graphPart = 2;
+  /** "Bloody Screen" — the red damage vignette. */
+  graphBlood = true;
+  /** "Pause Blur" — blur the frozen world behind the pause menu. */
+  pauseBlur = true;
   curCampaign = "human";
 
   // --- Raze 2 economy (credits + unlock ownership) ----------------------
@@ -254,13 +262,39 @@ class SDState {
     return !this.noGlow;
   }
 
+  /** Enable/disable ragdoll evaporation (`SD.graphRagev`), apply live, persist. */
+  setRagev(on: boolean): void {
+    this.graphRagev = on;
+    this.applyQuality();
+    this.save();
+  }
+
+  /** Enable/disable the blood damage vignette (`SD.graphBlood`), persist. */
+  setGraphBlood(on: boolean): void {
+    this.graphBlood = on;
+    this.save();
+  }
+
+  /** Enable/disable the pause blur (`SD.pauseBlur`), persist. */
+  setPauseBlur(on: boolean): void {
+    this.pauseBlur = on;
+    this.save();
+  }
+
+  /** Set the ambient-particle density 0..3 (`SD.graphPart`), apply live, persist. */
+  setGraphPart(n: number): void {
+    this.graphPart = Math.max(0, Math.min(3, n | 0));
+    this.applyQuality();
+    this.save();
+  }
+
   /**
    * Push the saved values into the Quality module, which notifies every live
    * subscriber (engine FPS cap, HUD, effects) so changes take effect without a
    * restart. Also refreshes the legacy `_stage.quality` slot if a game is up.
    */
   applyQuality(): void {
-    Quality.set(this.qual, this.noGlow);
+    Quality.set(this.qual, this.noGlow, this.graphRagev, this.graphPart);
     const g = this.game;
     if (g && g.main && g.main._stage && !this.ssMode) {
       g.main._stage.quality = Quality.stageQuality;
@@ -377,6 +411,10 @@ class SDState {
       jugKills: 0,
     };
     this.noGlow = false;
+    this.graphRagev = true;
+    this.graphPart = 2;
+    this.graphBlood = true;
+    this.pauseBlur = true;
     this.qual = "high";
     this.menuQual = QUALITY_LEVELS.indexOf("high");
     this.applyQuality();
@@ -444,6 +482,11 @@ class SDState {
       // Graphics settings. Old saves may hold Flash's "best", a bare index, or
       // nothing at all — normalizeQuality folds all of those onto a real level.
       this.noGlow = !!data.noGlow;
+      // Added with PhysVap; saves from before it default the effect on.
+      this.graphRagev = data.graphRagev ?? true;
+      this.graphPart = data.graphPart ?? 2;
+      this.graphBlood = data.graphBlood ?? true;
+      this.pauseBlur = data.pauseBlur ?? true;
       this.qual = normalizeQuality(data.qual ?? data.menuQual);
       this.menuQual = Math.max(0, QUALITY_LEVELS.indexOf(this.qual));
       this.applyQuality();
@@ -476,6 +519,10 @@ class SDState {
       stats: this.stats,
       language: this.language,
       noGlow: this.noGlow,
+      graphRagev: this.graphRagev,
+      graphBlood: this.graphBlood,
+      pauseBlur: this.pauseBlur,
+      graphPart: this.graphPart,
       qual: this.qual,
       menuQual: this.menuQual,
       curStage: this.curStage,

@@ -3,6 +3,7 @@ import { GAME_WIDTH, GAME_HEIGHT, FPS } from "../core/Config";
 import { ArmArt } from "../assets/ArmArt";
 import { SkinArt } from "../assets/SkinArt";
 import { GUN_ORDER, WEAPONS } from "./weapons";
+import { SPREE_TIERS } from "./Score";
 import { SD } from "../state/SD";
 import { Quality } from "../state/Quality";
 import type { GameScreen } from "./GameScreen";
@@ -22,21 +23,23 @@ import {
   C_AMMO_WHITE,
   C_GLOW_CYAN,
   C_TEAL,
-  C_GLASS,
   C_BEZEL,
   C_BEZEL_HI,
   DamageIndicator,
+  SCORE_BAR_W,
+  SCORE_BAR_H,
   bezelTile,
   clamp01,
   drawClipTicks,
   drawHeartbeat,
-  drawSkull,
   healthTint,
   measureMono,
   mkText,
+  modePlate,
   panel,
   razeGlass,
   rule,
+  scoreBar,
   teamColorOf,
 } from "./HudComponents";
 
@@ -129,14 +132,16 @@ const SLOT_H = 62;
 const RACK_W = RACK_SLOTS * SLOT_W + (RACK_SLOTS - 1) * SLOT_GAP;
 
 // --- top-right score header (doc 14 §1.5) ----------------------------------
-/** `mc_gametype` disc, hard against the right edge. */
-const ICON_R = 15;
-const ICON_CY = M + 22;
+/** `mc_gametype`: a light plate carrying the mode glyph, hard against the right. */
+const ICON_SZ = 34;
+const ICON_Y = M + 15;
 /** `scorebars`: two stacked race bars, `score / winScore` of the track. */
-const SB_W = 158;
-const SB_H = 13;
-const SC_ROW0_Y = M + 16;
-const SC_ROW_PITCH = 17;
+const SB_W = SCORE_BAR_W;
+const SB_H = SCORE_BAR_H;
+/** Drops the 9px bar onto the optical centre of the 13px text row beside it. */
+const SB_DY = 3;
+const SC_ROW0_Y = M + 18;
+const SC_ROW_PITCH = 16;
 const HDR_BOT = SC_ROW0_Y + 2 * SC_ROW_PITCH + 6;
 
 // Juggernaut banner, its own panel beneath the score header.
@@ -175,7 +180,7 @@ let EKG_Y = 0;
 let RACK_X = 0;
 let RACK_Y = 0;
 let HDR_RIGHT = 0;
-let ICON_CX = 0;
+let ICON_X = 0;
 let SB_X = 0;
 /** `txt_playerscore` / `txt_enemyscore` are right-aligned onto the bar track. */
 let SC_TEXT_RIGHT = 0;
@@ -207,8 +212,8 @@ function measureStage(): void {
   RACK_Y = ROW_BOT - SLOT_H;
 
   HDR_RIGHT = GAME_WIDTH - M;
-  ICON_CX = HDR_RIGHT - ICON_R;
-  SB_X = ICON_CX - ICON_R - 8 - SB_W;
+  ICON_X = HDR_RIGHT - ICON_SZ;
+  SB_X = ICON_X - 10 - SB_W;
   SC_TEXT_RIGHT = SB_X - 8;
   JUG_X = HDR_RIGHT - JUG_W;
   KF_X = HDR_RIGHT;
@@ -216,9 +221,27 @@ function measureStage(): void {
 
 measureStage();
 
-/** Raze 2 team palette (doc 14 §5), indexed by team: 0 = free-for-all. */
-const TEAM_BAR = [0x00ff00, 0xff9900, 0x00ccff];
-const TEAM_TEXT = [0xffffff, 0xff9966, 0xa3cfff];
+/**
+ * Raze 2 team palette, indexed by team: 0 = free-for-all. The names and the
+ * text colours are `Hud.as:394` / `:412` verbatim — there is no red team in
+ * Raze 2, the sides are Blue / Orange / Yellow / Green.
+ */
+const TEAM_NAMES = ["FFA", "Blue", "Orange", "Yellow", "Green"];
+const TEAM_TEXT = [0xffffff, 0xa3cfff, 0xff9966, 0xffff99, 0x99ff99];
+/**
+ * The two gradient stops of each colour frame of the score-bar symbol (char
+ * 1494), in `gotoAndStop(team + 2)` order. These are the real muted stops, not
+ * saturated primaries — the reason the original bars sit into the scene.
+ */
+const BAR_GRAD: [number, number][] = [
+  [0xababab, 0xe8e8e8], // frame 2 — FFA rival
+  [0x4385ab, 0x4ac9e8], // frame 3 — Blue
+  [0xab7d46, 0xe8a948], // frame 4 — Orange
+  [0xaba043, 0xe8d84a], // frame 5 — Yellow
+  [0x48ab40, 0x67e84a], // frame 6 — Green
+];
+/** Frame 1: the local player's own bar in a free-for-all. */
+const BAR_SELF_FFA: [number, number] = [0xaba043, 0xe8d84a];
 /** The local player's own score text: pale yellow in FFA, pale blue on a team. */
 const SELF_TEXT_FFA = 0xffff99;
 const SELF_TEXT_TEAM = 0xa3cfff;
@@ -316,16 +339,16 @@ const MODE_LABELS: Record<string, string> = {
 };
 
 /**
- * Kill-streak announcement ladder. Only the exact thresholds fire, so a long
- * run produces a series of escalating callouts rather than one per kill.
+ * Callout colours, escalating with the rung. The ladder itself (and its credit
+ * payouts) lives in `Score`, since `Score.addKill` is what decides it; this is
+ * only how loud each one looks.
  */
-const STREAK_TIERS: { at: number; label: string; color: number }[] = [
-  { at: 3, label: "KILLING SPREE", color: 0xffdd55 },
-  { at: 5, label: "RAMPAGE", color: 0xffa63d },
-  { at: 7, label: "DOMINATING", color: 0xff7a3d },
-  { at: 10, label: "UNSTOPPABLE", color: 0xff5a4d },
-  { at: 15, label: "GODLIKE", color: 0xff3ddc },
-];
+const CALLOUT_COLORS = [0xffdd55, 0xffa63d, 0xff5a4d, 0xff3ddc, 0xff3ddc];
+
+/** Kill-feed line colour (`Hud.addCustomFeed`): you, a teammate, an enemy. */
+const FEED_SELF = 0x33ffff;
+const FEED_ALLY = 0x99ffff;
+const FEED_ENEMY = 0xffa599;
 
 /** Extra context a caller can attach to a kill-feed line for colouring. */
 export interface KillInfo {
@@ -488,10 +511,14 @@ export class Hud {
   /** Elapsed match time, in frames. A match ends on its win condition, never
    *  on the clock, so this only ever counts up. */
   private timerTicks = 0;
+
+  /** The SWF's `Hud.gameTime`: frames of live match time, paused excluded.
+   *  Mission 15 of either campaign is scored against it (`Hud.as:648-676`). */
+  get gameTime(): number {
+    return this.timerTicks;
+  }
   /** Free-running frame counter, for the Juggernaut pulse and ammo flash. */
   private tick = 0;
-  /** Highest streak already announced per unit name (one callout per tier). */
-  private streakSeen = new Map<string, number>();
 
   constructor(private game: GameScreen) {
     const type = String(SD.matchSettings?.type ?? "dm");
@@ -550,7 +577,10 @@ export class Hud {
     this.view.addChild(this.streakText);
 
     // --- top-right score header ---
-    this.gtText = mkText(12, C_TEAL, true);
+    // `txt_gametype` is plain white in the original, not an accent colour: the
+    // caption is a label, and the only thing meant to catch the eye up here is
+    // whichever bar is winning.
+    this.gtText = mkText(12, C_TEXT, true);
     this.gtText.anchor.set(1, 0);
     this.gtText.x = SB_X + SB_W;
     this.gtText.y = M;
@@ -958,21 +988,39 @@ export class Hud {
   }
 
   /**
-   * Kill-streak callout. Fires once per tier per unit, so a fifteen-kill run
-   * escalates through the ladder instead of shouting on every kill.
+   * `Hud.addCustomFeed`: one kill-feed line about a unit, coloured by their
+   * relationship to the player rather than by the event.
    */
-  announceStreak(name: string, streak: number): void {
-    const tier = STREAK_TIERS.find((t) => t.at === streak);
-    if (!tier) return;
-    if ((this.streakSeen.get(name) ?? 0) >= streak) return;
-    this.streakSeen.set(name, streak);
-    this.announce(`${name} — ${tier.label}!`, tier.color);
-    this.addMessage(`${name}: ${tier.label} (${streak})`, tier.color);
+  addCustomFeed(unit: { _name?: string; name?: string; team?: number; human?: boolean },
+                text: string): void {
+    const mine = this.game?.player;
+    const color = unit.human
+      ? FEED_SELF
+      : unit.team && mine && unit.team === mine.team
+        ? FEED_ALLY
+        : FEED_ENEMY;
+    this.pushFeedRow([[`${unit._name ?? unit.name ?? "?"}${text}`, color, KF_SIZE]]);
   }
 
-  /** Reset a unit's streak ladder — called when their streak is broken. */
-  resetStreak(name: string): void {
-    this.streakSeen.delete(name);
+  /**
+   * Multikill callout — `Score.addKill`'s first ladder. Only the player gets
+   * the big centre-screen shout (and its credits); everyone gets a feed line.
+   */
+  announceKill(unit: any, label: string, isPlayer: boolean): void {
+    if (isPlayer) this.announce(label.toUpperCase(), CALLOUT_COLORS[0]);
+    this.addCustomFeed(unit, ` got a ${label}`);
+  }
+
+  /**
+   * Spree callout. The thresholds only fire on the nose (`Score.SPREE_TIERS`),
+   * so a long run escalates through the ladder rather than shouting every kill.
+   */
+  announceSpree(unit: any, label: string, streak: number, isPlayer: boolean): void {
+    const rung = SPREE_TIERS.findIndex((t) => t.at === streak);
+    const color = CALLOUT_COLORS[Math.max(0, rung)] ?? CALLOUT_COLORS[0];
+    if (isPlayer) this.announce(label.toUpperCase(), color);
+    const lead = SPREE_TIERS[rung]?.lead ?? "";
+    this.addCustomFeed(unit, ` is ${lead}${label}`);
   }
 
   /**
@@ -1239,15 +1287,12 @@ export class Hud {
       bezelTile(g, RACK_X + i * (SLOT_W + SLOT_GAP), RACK_Y, SLOT_W, SLOT_H);
     }
 
-    // Score header: the race-bar capsule and the gametype disc.
-    razeGlass(g, SB_X - 3, SC_ROW0_Y - 2, SB_W + 6, SC_ROW_PITCH + SB_H + 4);
-    g.circle(ICON_CX, ICON_CY, ICON_R + 2).fill({ color: 0x000000, alpha: 0.7 });
-    g.circle(ICON_CX, ICON_CY, ICON_R)
-      .fill({ color: C_GLASS, alpha: 0.92 })
-      .stroke({ color: 0x000000, width: 1 });
-    // Only the Deathmatch frame of `mc_gametype` is documented; every mode
-    // borrows it rather than inventing icons the original never had.
-    drawSkull(g, ICON_CX, ICON_CY, ICON_R * 0.8);
+    // Score header: just the gametype plate. There is deliberately no panel
+    // behind the race bars — the original floats the caption, the two rows and
+    // the bars straight over the level, and boxing them in a glass capsule is
+    // what made this corner read as a generic widget instead of Raze chrome.
+    // `mc_gametype` gets the mode it was built for rather than a fixed skull.
+    modePlate(g, ICON_X, ICON_Y, ICON_SZ, String(SD.matchSettings?.type ?? "dm"));
   }
 
   // --- per-frame -----------------------------------------------------------
@@ -1414,9 +1459,18 @@ export class Hud {
     let sides: { name: string; score: number; team: number; self: boolean }[];
     if (this.teamMode) {
       const other = myTeam === 1 ? 2 : 1;
+      // `Hud.as:382` labels the local player's side "Blue Team" whatever team
+      // index it actually holds, and only the opposition is named by its real
+      // colour. That is why the original never shows two colours you have to
+      // work out — you are always Blue, they are Orange (or Yellow / Green).
       sides = [
-        { name: myTeam === 1 ? "Red" : "Blue", score: this.teamTotal(myTeam), team: myTeam, self: true },
-        { name: other === 1 ? "Red" : "Blue", score: this.teamTotal(other), team: other, self: false },
+        { name: "Blue Team", score: this.teamTotal(myTeam), team: 1, self: true },
+        {
+          name: `${TEAM_NAMES[other] ?? TEAM_NAMES[2]} Team`,
+          score: this.teamTotal(other),
+          team: other,
+          self: false,
+        },
       ];
     } else {
       const rival = this.game.units
@@ -1438,13 +1492,14 @@ export class Hud {
         ? this.teamMode ? SELF_TEXT_TEAM : SELF_TEXT_FFA
         : TEAM_TEXT[side.team] ?? TEAM_TEXT[0];
 
-      const y = SC_ROW0_Y + i * SC_ROW_PITCH;
-      const w = clamp01(side.score / cap) * SB_W;
-      g.rect(SB_X, y, SB_W, SB_H).fill({ color: 0x000000, alpha: 0.55 });
-      if (w > 0) {
-        g.rect(SB_X, y, w, SB_H).fill({ color: TEAM_BAR[side.team] ?? TEAM_BAR[0], alpha: 0.85 });
-      }
-      g.rect(SB_X, y, SB_W, SB_H).stroke({ color: 0x000000, width: 1, alpha: 0.8 });
+      // Free-for-all gives your own bar the yellow frame and the rival the grey
+      // one; on a team both sides take their team's colour frame.
+      const grad =
+        side.self && !this.teamMode
+          ? BAR_SELF_FFA
+          : (BAR_GRAD[side.team] ?? BAR_GRAD[0]);
+      const y = SC_ROW0_Y + i * SC_ROW_PITCH + SB_DY;
+      scoreBar(g, SB_X, y, SB_W, SB_H, side.score / cap, grad[0], grad[1]);
     }
 
     if (this.elimMode) {

@@ -1,10 +1,10 @@
-import { Container, Text, TextStyle } from "pixi.js";
+import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import { Screen } from "../core/Screen";
 import { GAME_WIDTH, GAME_HEIGHT } from "../core/Config";
 import { SD } from "../state/SD";
 import { Sound } from "../audio/Sounds";
 import { UiArt } from "../assets/UiArt";
-import { Achievements } from "../game/Achievements";
+import { Achievements, R2_ACH_IDS } from "../game/Achievements";
 import { makeBackground, makeScrim } from "./ui";
 import { Tween, slideIn } from "../core/Tween";
 import { MenuScreen } from "./MenuScreen";
@@ -28,9 +28,14 @@ import {
 } from "../ui/raze2";
 
 /**
- * Stats & medals screen. Displays SD.stats (kills/deaths/K-D, wins/losses,
- * headshots, shot accuracy) and any medals earned in SD.medals, using the
- * medal table from game/Achievements.ts.
+ * Stats & awards screen — also where the menu's ACHIEVEMENTS entry lands.
+ *
+ * Left panel: SD.stats (kills/deaths/K-D, wins/losses, headshots, accuracy).
+ * Right panel: the ten Raze 2 achievements, then any Raze 1 kill-bonus medals
+ * earned, both read out of the table in game/Achievements.ts. Achievements list
+ * whether or not they are earned — `Menu.as:2585-2601` builds all ten rows, and
+ * for the four secrets the locked row's description is the only hint the player
+ * ever gets — while medals only appear once banked.
  *
  * "RESET STATS" clears SD.stats and SD.medals behind a confirmation dialog.
  * The profile (name, personality, preset, customisation) and campaign
@@ -55,6 +60,11 @@ const MEDALS_W = 440;
 const PANEL_Y = 92;
 const BLOCK_W = STATS_W + 20 + MEDALS_W;
 
+/** Top of the awards list body, below the panel's fixed heading. */
+const LIST_Y = PANEL_Y + 52;
+/** Pixels scrolled per wheel notch / arrow press, as on the info screen. */
+const SCROLL_STEP = 42;
+
 const statsX = () => Math.round((GAME_WIDTH - BLOCK_W) / 2);
 const medalsX = () => statsX() + STATS_W + 20;
 const panelH = () => GAME_HEIGHT - PANEL_Y - 103;
@@ -68,6 +78,13 @@ export class StatsScreen extends Screen {
   private toast!: Text;
   private toastTimer = 0;
 
+  /** Scrolled body of the awards column, rebuilt with the panel. */
+  private medalsContent: Container | null = null;
+  private scrollBar: Graphics | null = null;
+  private scrollTrackH = 0;
+  private scroll = 0;
+  private maxScroll = 0;
+
   constructor(...args: ConstructorParameters<typeof Screen>) {
     super(...args);
 
@@ -75,7 +92,7 @@ export class StatsScreen extends Screen {
     this.view.addChild(makeScrim(0x05070c, 0.6));
 
     const title = new Text({
-      text: "STATS & MEDALS",
+      text: "STATS & AWARDS",
       style: new TextStyle({
         fill: C_HEADER, fontFamily: FONT_HEADER, fontSize: 30,
         fontWeight: "700", letterSpacing: 3,
@@ -197,6 +214,14 @@ export class StatsScreen extends Screen {
     });
   }
 
+  /**
+   * The awards column: the ten Raze 2 achievements (always all ten — see
+   * `R2_ACH_IDS`), then whatever Raze 1 kill-bonus medals have been earned.
+   *
+   * The rows outrun the panel, so the list body is a masked, wheel/arrow
+   * scrollable column like the info screen's. Both the mask and the content live
+   * inside `medalsLayer` so the intro slide carries them together.
+   */
   private buildMedalsPanel(): void {
     const layer = this.medalsLayer;
     layer.removeChildren();
@@ -211,7 +236,7 @@ export class StatsScreen extends Screen {
     layer.addChild(panel.view);
 
     const heading = new Text({
-      text: "MEDALS",
+      text: "ACHIEVEMENTS",
       style: new TextStyle({
         fill: C_HEADER, fontFamily: FONT_HEADER, fontSize: 18,
         fontWeight: "700", letterSpacing: 2,
@@ -223,62 +248,149 @@ export class StatsScreen extends Screen {
     heading.y = y + 18;
     layer.addChild(heading);
 
-    const earnedKeys = Object.keys(SD.medals).filter((k) => SD.medals[k]);
-    let rowY = y + 58;
+    const content = new Container();
+    const mask = new Graphics();
+    mask.rect(x + 4, LIST_Y, w - 8, y + h - 14 - LIST_Y).fill({ color: 0xffffff });
+    content.mask = mask;
+    layer.addChild(mask, content);
+    this.medalsContent = content;
 
-    if (earnedKeys.length === 0) {
-      const none = new Text({
-        text: "No medals earned yet.\nPlay matches and complete\nthe campaign to unlock some!",
-        style: new TextStyle({
-          fill: C_DIM,
-          fontFamily: FONT_BODY,
-          fontSize: 14,
-          align: "center",
-          lineHeight: 20,
-        }),
-      });
-      none.alpha = A_BODY;
-      none.anchor.set(0.5, 0);
-      none.x = x + w / 2;
-      none.y = rowY + 20;
-      layer.addChild(none);
-      return;
+    // Achievements first, earned or not: a locked row's description is the hint.
+    let rowY = 0;
+    for (const key of R2_ACH_IDS) {
+      rowY = this.awardRow(content, key, rowY, !!SD.medals[key]);
     }
 
-    for (const key of earnedKeys) {
-      const medal = Achievements.getAch(key);
-      if (rowY > y + h - 60) break; // stop before overflowing the panel
-
-      const name = new Text({
-        text: medal.name,
+    // Then the Raze 1 kill-bonus medals, which are only listed once earned.
+    const earned = Object.keys(SD.medals).filter(
+      (k) => SD.medals[k] && !R2_ACH_IDS.includes(k),
+    );
+    if (earned.length) {
+      const sub = new Text({
+        text: "MEDALS",
         style: new TextStyle({
-          fill: C_SCORE_GOLD, fontFamily: FONT_HEADER, fontSize: 15,
-          fontWeight: "700", letterSpacing: 1,
+          fill: C_HEADER, fontFamily: FONT_HEADER, fontSize: 16,
+          fontWeight: "700", letterSpacing: 2,
         }),
       });
-      name.alpha = A_LABEL;
-      name.x = x + 18;
-      name.y = rowY;
-      layer.addChild(name);
-
-      const desc = new Text({
-        text: medal.desc,
-        style: new TextStyle({
-          fill: C_BODY,
-          fontFamily: FONT_BODY,
-          fontSize: 13,
-          wordWrap: true,
-          wordWrapWidth: w - 36,
-        }),
-      });
-      desc.alpha = A_BODY;
-      desc.x = x + 18;
-      desc.y = rowY + 18;
-      layer.addChild(desc);
-
-      rowY += 18 + desc.height + 14;
+      sub.alpha = A_HEADER;
+      sub.x = x + 18;
+      sub.y = rowY + 10;
+      content.addChild(sub);
+      rowY += 38;
+      for (const key of earned) rowY = this.awardRow(content, key, rowY, true);
     }
+
+    this.maxScroll = Math.max(0, rowY - (y + h - 14 - LIST_Y) + 12);
+    this.scroll = Math.min(this.scroll, this.maxScroll);
+    this.buildScrollBar(layer);
+    this.applyScroll();
   }
+
+  /**
+   * One award row. Locked rows keep the name and description — that text is the
+   * only in-game hint for the four secrets — but drop to the dim palette, and
+   * the reward is spelled out so the player can see what is on offer.
+   */
+  private awardRow(parent: Container, key: string, rowY: number, earned: boolean): number {
+    const x = medalsX();
+    const w = MEDALS_W;
+    const medal = Achievements.getAch(key);
+
+    const name = new Text({
+      text: medal.name,
+      style: new TextStyle({
+        fill: earned ? C_SCORE_GOLD : C_LABEL, fontFamily: FONT_HEADER,
+        fontSize: 15, fontWeight: "700", letterSpacing: 1,
+      }),
+    });
+    name.alpha = earned ? A_LABEL : A_LABEL * 0.55;
+    name.x = x + 18;
+    name.y = rowY;
+    parent.addChild(name);
+
+    // Right-aligned status: the payout while locked, a tick once it is banked.
+    const rew = medal.rew;
+    const tag = earned
+      ? "✓"
+      : rew
+        ? rew[0] === "credits" ? `${rew[1]} cr` : `${rew[1]}`
+        : "";
+    if (tag) {
+      const t = new Text({
+        text: tag,
+        style: new TextStyle({
+          fill: earned ? C_OPTIONS_GREEN : C_DIM, fontFamily: FONT_VALUE,
+          fontSize: 13, fontWeight: "700",
+        }),
+      });
+      t.alpha = earned ? A_VALUE : A_BODY;
+      t.anchor.set(1, 0);
+      t.x = x + w - 18;
+      t.y = rowY + 2;
+      parent.addChild(t);
+    }
+
+    const desc = new Text({
+      text: medal.desc,
+      style: new TextStyle({
+        fill: C_BODY,
+        fontFamily: FONT_BODY,
+        fontSize: 13,
+        wordWrap: true,
+        wordWrapWidth: w - 36,
+      }),
+    });
+    desc.alpha = earned ? A_BODY : A_BODY * 0.55;
+    desc.x = x + 18;
+    desc.y = rowY + 18;
+    parent.addChild(desc);
+
+    return rowY + 18 + desc.height + 14;
+  }
+
+  // --- award-list scrolling -------------------------------------------------
+
+  private buildScrollBar(layer: Container): void {
+    const x = medalsX() + MEDALS_W - 12;
+    const trackH = panelH() - (LIST_Y - PANEL_Y) - 22;
+    const track = new Graphics();
+    track.roundRect(x, LIST_Y + 4, 5, trackH, 2.5).fill({ color: 0x000000, alpha: 0.5 });
+    track.visible = this.maxScroll > 0;
+    layer.addChild(track);
+
+    this.scrollBar = new Graphics();
+    layer.addChild(this.scrollBar);
+    this.scrollTrackH = trackH;
+  }
+
+  private applyScroll(): void {
+    if (!this.medalsContent) return;
+    this.scroll = Math.max(0, Math.min(this.maxScroll, this.scroll));
+    this.medalsContent.y = LIST_Y - this.scroll;
+
+    const g = this.scrollBar;
+    if (!g) return;
+    g.clear();
+    if (this.maxScroll <= 0) return;
+    const trackH = this.scrollTrackH;
+    const thumbH = Math.max(28, trackH * (trackH / (trackH + this.maxScroll)));
+    const t = this.scroll / this.maxScroll;
+    const x = medalsX() + MEDALS_W - 12;
+    g.roundRect(x, LIST_Y + 4 + (trackH - thumbH) * t, 5, thumbH, 2.5)
+      .fill({ color: C_OPTIONS_GREEN, alpha: 0.85 });
+  }
+
+  private scrollBy(px: number): void {
+    if (this.maxScroll <= 0) return;
+    this.scroll += px;
+    this.applyScroll();
+  }
+
+  private onWheel = (e: WheelEvent): void => {
+    if (this.confirm?.visible) return;
+    this.scrollBy(Math.sign(e.deltaY) * SCROLL_STEP);
+  };
 
   // --- reset confirmation --------------------------------------------------
 
@@ -345,12 +457,19 @@ export class StatsScreen extends Screen {
     this.confirm = c;
     this.view.addChild(c);
 
-    // Esc dismisses the dialog, matching the menu's panel shortcuts.
+    // Esc dismisses the dialog, matching the menu's panel shortcuts; with it
+    // closed the same handler drives the award list's arrow-key scrolling.
     window.addEventListener("keydown", this.onKeyDown);
+    window.addEventListener("wheel", this.onWheel, { passive: true });
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
-    if (e.code === "Escape" && this.confirm.visible) this.closeConfirm();
+    if (this.confirm.visible) {
+      if (e.code === "Escape") this.closeConfirm();
+      return;
+    }
+    if (e.code === "ArrowDown") this.scrollBy(SCROLL_STEP);
+    else if (e.code === "ArrowUp") this.scrollBy(-SCROLL_STEP);
   };
 
   private askReset(): void {
@@ -366,6 +485,7 @@ export class StatsScreen extends Screen {
   private doReset(): void {
     SD.resetStats();
     this.confirm.visible = false;
+    this.scroll = 0; // the list just got shorter; don't leave it parked past the end
     this.buildStatsPanel();
     this.buildMedalsPanel();
     this.introPanels();
@@ -389,7 +509,7 @@ export class StatsScreen extends Screen {
 
   private back(): void {
     Sound.play("R2_ClickBack");
-    this.engine.setScreen(MenuScreen);
+    this.engine.setScreen(MenuScreen, undefined, "slideRight");
   }
 
   enterFrame(dt: number): void {
@@ -403,6 +523,7 @@ export class StatsScreen extends Screen {
 
   destructor(): void {
     window.removeEventListener("keydown", this.onKeyDown);
+    window.removeEventListener("wheel", this.onWheel);
     Tween.cancel(this);
     super.destructor();
   }

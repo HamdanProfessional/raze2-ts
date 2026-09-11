@@ -30,6 +30,16 @@ const DEFAULT_HIT_H = 14;
 export class RdGun {
   unit: any;
   body!: Body;
+  /**
+   * Frames since the gun was dropped, counted by `Phys.cleanupGuns`.
+   *
+   * `RdActor` needs an age for the same reason (see its `settled`): a body can
+   * fail Box2D's sleep test indefinitely — wedged in a corner, jittering on a
+   * slope, or falling out of the world through a gap, where it accelerates
+   * forever and never sleeps at all. Guns were retired on `isAwake()` alone, so
+   * any of those leaked a body plus its sprite for the rest of the match.
+   */
+  age = 0;
 
   private rdPhys: Phys;
   private collideIndex: number;

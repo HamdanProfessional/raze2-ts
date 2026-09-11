@@ -5,8 +5,13 @@ import type { WallRect } from "../physics/Phys";
 import { SD } from "../state/SD";
 import { Quality } from "../state/Quality";
 import { Backgrounds } from "../assets/Backgrounds";
+import { PropArt } from "../assets/PropArt";
 import { WallMask, WallMasks } from "./WallMask";
-import { AmbientParticles, themeForMap } from "./Particles";
+import { MapParticles } from "./MapParticles";
+import { MapProps } from "./MapProps";
+import { Water, type WaterBody } from "./Water";
+import { Reflection } from "./Reflection";
+import { BgArt, LOL_CATS_SKY } from "../assets/BgArt";
 import { PickupItem, type PickupItemSpec } from "../game/PickupItem";
 import { PickupWeapon, type PickupWeaponSpec } from "../game/PickupWeapon";
 import LEVEL_DATA from "../assets/levelData.json";
@@ -20,20 +25,45 @@ import { WEAPONS } from "./weapons";
  * mask decoding), so this has to resolve before a match is built.
  */
 export function preloadLevel(level: string): Promise<void> {
-  return Promise.all([Backgrounds.ensureLevel(level), WallMasks.ensure(level)]).then(() => {});
+  return Promise.all([
+    Backgrounds.ensureLevel(level),
+    WallMasks.ensure(level),
+    BgArt.ensure(level, skyOverride()),
+    // Only the maps with authored props pay for this; tut's set alone is ~73 MB
+    // of resident RGBA, which is not something every level should carry.
+    PropArt.loadForMap(level),
+  ]).then(() => {});
 }
 
-/** Raze 2 item-pickup kind → this port's PickupItem kind. */
-const RAZE2_ITEM_KIND: Record<string, string> = {
+/** `Arena.as:795`: the "lol cats" special mode replaces every map's sky frame.
+ *  Undefined when the mode is off, which leaves the map's own choice alone. */
+function skyOverride(): string | undefined {
+  return SD.matchSettings?.specialMode === LOL_CATS_SKY ? LOL_CATS_SKY : undefined;
+}
+
+/**
+ * Raze 2 item-pickup kind → this port's PickupItem kind.
+ *
+ * The `s`/`b` prefixes are **small** and **big**, not "super" and "big" —
+ * `NodePickup.getPickup` is explicit: `sshield`→`shield(50)`, `bshield`→
+ * `shield(100)`, `shealth`→`heal(50)`, `bhealth`→`heal(100)`. Reading `s` as
+ * "super" had `shealth` (the commonest health drop, 20 across the maps) handing
+ * out the big heal, and left `sshield` and `bhealth` unmapped — and since the
+ * lookup fell back to plain health, all 12 `sshield` drops in the game were
+ * rendering and behaving as health packs rather than shields.
+ */
+export const RAZE2_ITEM_KIND: Record<string, string> = {
   health: "health",
-  shealth: "healthBig", // super health
+  shealth: "health", // small health — heal(50)
+  bhealth: "healthBig", // big health — heal(100)
   shield: "shield",
-  bshield: "shieldBig", // big shield
+  sshield: "shield", // small shield — shield(50)
+  bshield: "shieldBig", // big shield — shield(100)
   damage: "ddamage", // double damage
   invin: "invin",
+  rapid: "rapid", // rapid fire — 2x fire rate, free ammo, 6.5 s
   fade: "fade",
   cloak: "fade",
-  rapid: "ddamage", // no rapid-fire item in this port; nearest offensive buff
 };
 
 /** Raze 2 map definition (pixel-mask collision + extracted node data). */
@@ -49,8 +79,22 @@ interface Raze2MapDef {
   /** The map's authored navigation graph, when we have it. Without one the bots
    *  fall back to a mesh over the spawn points, which is fine for an arena but
    *  cannot express a route — the tutorial's guide has to walk a fixed chain. */
-  waypoints?: { name: string; x: number; y: number; connects: string[] }[];
-  spawns: [number, number][];
+  waypoints?: {
+    name: string; x: number; y: number; connects: string[];
+    /** Authored jump zones attached to this node (`NodeAiAction`). */
+    actions?: { action: string; x: number; y: number; w: number; h: number }[];
+  }[];
+  /** The author's `waterMC` rectangle: the strip `Water` simulates. Only ocean
+   *  has one. Extracted by `tools/maps/arena_clips.py`. */
+  water?: { x: number; y: number; w: number; h: number };
+  /** The author's `reflectTake1` / `reflectShow1` pair: capture this rectangle
+   *  of the actors-and-effects layer and redraw it there. Only snow has one. */
+  reflect?: {
+    take: { x: number; y: number; w: number; h: number };
+    show: { x: number; y: number; sx: number; sy: number };
+  };
+  /** `[x, y]`, or `[x, y, team]` where the author tagged a side (1/2). */
+  spawns: ([number, number] | [number, number, number])[];
   ctf: [number, number][];
   hold: [number, number][];
   /** [x, y, rawname] where rawname = `{p|w}_{kind}_{respawnSecs}`. */
@@ -60,6 +104,12 @@ interface Raze2MapDef {
    *  5 diagonal variants (0 for straight pads). Extracted from the authentic
    *  `00fff*`/`00ccf*` wall colours (doc 12 §2.3). */
   jumpPads: [number, number, number, number, number?, number?][];
+  /** Ragdoll-world collision, from the map's `NodePhysBox` clips:
+   *  `[cx, cy, w, h, rotationDeg?]`, centre-anchored. Live units collide
+   *  against `mask`; the corpse world is Box2D and only ever sees these
+   *  (`Arena.as:894` -> `PhysWorld.generateWorld`). Most maps ship none — a
+   *  corpse there really does fall, which is why it only has four seconds. */
+  physBoxes?: [number, number, number, number, number?][];
 }
 
 /** Authentic level definition (world size, collision rects, spawn points). */
@@ -79,6 +129,23 @@ interface LevelDef {
   /** Jump-boost pads: [x, y, w, h, power?]. A unit that lands on one is flung
    *  up (SWF "Jump Boost" zone). x/y is the pad's top-left; power defaults ~2.3. */
   jumpPads?: [number, number, number, number, number?][];
+  /** Walkable sloped surfaces: `[x0, y0, x1, y1]`, x0 < x1, world px.
+   *
+   *  The `walls` above are a 3px-quantized maximal-rectangle cover of the
+   *  level's collision mask, which is exact for axis-aligned platforms but
+   *  renders every diagonal as a blocky staircase. These segments are the
+   *  diagonals recovered from that cover's top edge by
+   *  `tools/slopes/fit_slopes.py`. They describe only the walkable *surface* —
+   *  the rects remain the level's body for bullets and horizontal blocking. */
+  slopes?: [number, number, number, number][];
+}
+
+/** A walkable sloped surface. `x0 < x1`; `y` is linear between the ends. */
+export interface SlopeSeg {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
 }
 
 /** A live jump pad (world rect + launch multiplier + horizontal kick). */
@@ -110,6 +177,9 @@ export interface JumpPad {
 const SKY_PARALLAX = 0.9;
 /** Grid step (world px) used when scanning the special layer for water. */
 const WATER_STEP = 12;
+/** Surface step (px) two adjacent water columns may differ by and still count
+ *  as the same pool. Above it they are separate bodies of water. */
+const WATER_JOIN = 24;
 
 /** Max distance a spawn may sit above its platform and still snap onto it. */
 const SPAWN_SNAP = 6;
@@ -121,13 +191,25 @@ export interface SpawnNode {
   y: number;
   name: string;
   taken: boolean;
+  /** Authored side: 0 = neutral (the only pool non-CTF modes draw from),
+   *  1/2 = that team's base. See `Arena.teamSpawns`. */
+  team: number;
 }
 export interface WayNode {
   name: string;
   x: number;
   y: number;
   connects: string[];
-  actions: { action: string }[];
+  /**
+   * Authored jump zones (`NodeAiAction`), attached to whichever waypoints the
+   * marker's name listed. A bot heading for this node and standing inside one
+   * of these rects jumps: `j` only if it is not already airborne, `d` even if
+   * it is — which is how the double jump gets spent (`AI.as:598-618`).
+   *
+   * The rect is `[x, x+w] x [y, y+h]`: `UT.inBox` treats the marker's
+   * registration point as the top-left corner.
+   */
+  actions: { action: string; x: number; y: number; w: number; h: number }[];
 }
 
 /** Playable levels, with display names for the menu. */
@@ -158,16 +240,27 @@ export class Arena {
   private bg?: Sprite;
   private geo = new Graphics();
 
+  /** The map's authored animated props (gears, bridges, lights). Its `front`
+   *  container is added by GameScreen *above* the units — see {@link MapProps}. */
+  props?: MapProps;
+
   /** Camera offset (arena is not scrolled yet). */
   x = 0;
   y = 0;
 
   level: string;
   walls: WallRect[] = [];
+  /** Walkable diagonals recovered from the rect cover (rect levels only). See
+   *  `LevelDef.slopes`. Empty on pixel-mask maps, which get slopes for free. */
+  slopes: SlopeSeg[] = [];
   /** Pixel-mask collision for Raze 2 maps (null = rect-collision Raze 1 level).
    *  When present, Unit samples this instead of iterating `walls` for the
    *  interior geometry; the boundary rects still guard the world edges. */
   wallMask: WallMask | null = null;
+  /** The authored `NodePhysBox` rects, on the Raze 2 maps that ship any. */
+  physBoxes: WallRect[] = [];
+  /** Set by GameScreen: where a waterfall droplet or snowflake lands. */
+  onSplash?: (x: number, y: number) => void;
   spawnNodes: SpawnNode[] = [];
   wayNodes: WayNode[] = [];
   /** CTF flag stands (Raze 2 maps). team 1 = left stand, 2 = right stand. */
@@ -178,14 +271,52 @@ export class Arena {
   itemPickups: PickupItem[] = [];
   weapPickups: PickupWeapon[] = [];
   jumpPads: JumpPad[] = [];
+  /**
+   * Box outside which a unit counts as having left the level and dies to the
+   * environment (`Unit.containInArena`, `Unit.as:577`).
+   *
+   * The SWF hardcodes `x < 0 || y < 0 || x > 2880 || y > 2880`, which is not a
+   * general rule — it is a description of where Raze 2's own maps sit. Every
+   * Raze 2 map is laid out inside that box with its origin at the top-left, so
+   * there the constant and the level's extent are the same thing.
+   *
+   * The ported Raze 1 levels are not laid out that way: their geometry sits
+   * around the Flash stage origin and legitimately runs negative — all four
+   * reach past x = 0 (pit and space out to x = -120), and `space`'s topmost
+   * platform has its surface at y = -16. Taking the constant literally there
+   * kills units standing on real ground: two of `space`'s eight spawn nodes
+   * ground onto that platform, so a quarter of spawns died on frame 1, through
+   * spawn invulnerability. Each level publishes its own box instead.
+   */
+  killBounds = { x0: 0, y0: 0, x1: 2880, y1: 2880 };
+  /**
+   * Whether `wayNodes` is the map's hand-authored navigation graph (with its
+   * jump zones) rather than the fallback mesh over spawn points.
+   *
+   * It matters to the AI: an authored graph says exactly where a route climbs,
+   * so a bot jumps only inside a marked zone. The spawn mesh says nothing about
+   * how to get anywhere, so on those levels the AI still has to guess.
+   */
+  authoredWaypoints = false;
   /** Animated overlay for the jump pads (pulsing chevrons). */
   private padGfx = new Graphics();
   /** Master frame counter (drives sky drift, water shimmer, particles, pads). */
   private tick = 0;
 
   // --- environment polish (Raze 2 maps) ----------------------------------
-  /** Themed sky gradient, drawn oversized so it can parallax without gaps. */
+  /** Themed sky gradient, drawn oversized so it can parallax without gaps.
+   *  Fallback only: used where the map has no authored `BgSky` layer. */
   private skyG?: Graphics;
+  /** Authentic backdrop: static sky + the two parallax layers (`Arena.as:792`). */
+  private skySprite?: Sprite;
+  private bg1?: Sprite;
+  private bg2?: Sprite;
+  /** Each parallax layer's rendered content size `w/h` (the formula's divisor)
+   *  and `lx/ly`, where that content hangs off the clip's registration point. */
+  private bg1Box = { w: 0, h: 0, lx: 0, ly: 0 };
+  private bg2Box = { w: 0, h: 0, lx: 0, ly: 0 };
+  /** Same, for the static sky — which only ever needs the registration offset. */
+  private skyBox = { lx: 0, ly: 0 };
   /** Draw-origin of the sky (top-left of the oversized gradient, world px). */
   private skyHomeX = 0;
   private skyHomeY = 0;
@@ -193,12 +324,16 @@ export class Arena {
   private waterGfx?: Graphics;
   /** Animated surface shimmer over the water (gated by the Lights setting). */
   private waterShimmer?: Graphics;
+  /** The simulated wave surface (`Water.as`), null on maps with no water. */
+  water: Water | null = null;
+  /** The authored reflection window, null on maps without one. */
+  reflection: Reflection | null = null;
   /** Topmost water pixel per sampled column (the water surface line). */
   private waterSurface: { x: number; y: number }[] = [];
   /** Whether this map has any water region at all. */
   private hasWater = false;
-  /** Per-map ambient particle emitter (dust/ember/snow/bubble). */
-  private particles?: AmbientParticles;
+  /** The map's authored ambient particles (`Stats_MapParticles`). */
+  particles?: MapParticles;
 
   floorY = GAME_HEIGHT - 70;
   /** Full playfield size (world px). Camera clamps to this. */
@@ -262,6 +397,11 @@ export class Arena {
     this.view.addChild(this.geo);
 
     for (const [x, y, w, h] of d.walls) this.wall(x, y, w, h);
+    for (const [x0, y0, x1, y1] of d.slopes ?? []) {
+      // Normalise so every segment reads left-to-right; the surface queries all
+      // assume x0 < x1 and would silently miss on a reversed one.
+      this.slopes.push(x0 <= x1 ? { x0, y0, x1, y1 } : { x0: x1, y0: y1, x1: x0, y1: y0 });
+    }
 
     // Jump-boost pads (flung-up zones). Snap each pad's top to the real surface
     // under its centre so a grounded unit reliably registers on it.
@@ -304,11 +444,15 @@ export class Arena {
     d.spawns.forEach(([x, y]) => {
       const gy = this.groundSpawn(x, y);
       if (gy === null) return;
-      this.spawnNodes.push({ x, y: gy, name: "s" + this.spawnNodes.length, taken: false });
+      this.spawnNodes.push({
+        x, y: gy, name: "s" + this.spawnNodes.length, taken: false, team: 0,
+      });
     });
     // Never leave a level unplayable if the data is degenerate.
     if (!this.spawnNodes.length) {
-      this.spawnNodes = d.spawns.map(([x, y], i) => ({ x, y, name: "s" + i, taken: false }));
+      this.spawnNodes = d.spawns.map(([x, y], i) => ({
+        x, y, name: "s" + i, taken: false, team: 0,
+      }));
     }
     const mid = this.spawnNodes[Math.floor(this.spawnNodes.length / 2)];
     this.humanWP = { x: mid.x, y: mid.y };
@@ -317,6 +461,28 @@ export class Arena {
       connects: this.spawnNodes.filter((_, j) => j !== i).map((o) => o.name),
       actions: [],
     }));
+
+    // Out-of-level box (see `killBounds`). These levels sit around the Flash
+    // stage origin rather than inside Raze 2's 0..2880 box, so derive it from
+    // what the level actually occupies: the union of the collision rects and
+    // the nominal world, with slack so a unit brushing the outermost platform
+    // is never "outside". Falling off the bottom still crosses it and kills,
+    // which is the behaviour the check exists for.
+    {
+      const M = 240;
+      let x0 = 0, y0 = 0, x1 = this.worldW, y1 = this.worldH;
+      for (const w of this.walls) {
+        x0 = Math.min(x0, w.x - w.width / 2);
+        y0 = Math.min(y0, w.y - w.height / 2);
+        x1 = Math.max(x1, w.x + w.width / 2);
+        y1 = Math.max(y1, w.y + w.height / 2);
+      }
+      for (const s of this.spawnNodes) {
+        x0 = Math.min(x0, s.x); y0 = Math.min(y0, s.y);
+        x1 = Math.max(x1, s.x); y1 = Math.max(y1, s.y);
+      }
+      this.killBounds = { x0: x0 - M, y0: y0 - M, x1: x1 + M, y1: y1 + M };
+    }
 
     // Authentic levels show their platforms in the art, so no overlay. Levels
     // with no backdrop (Sandbox) need the collision drawn to be playable.
@@ -335,12 +501,22 @@ export class Arena {
     this.floorY = m.h;
     this.authentic = true;
     this.wallMask = WallMasks.get(level);
+    // Ragdoll-world collision. These are NOT unit collision — the mask above is
+    // — they are the only static geometry the corpse physics ever sees, exactly
+    // as in the SWF. Only jungle, mines and snow ship any.
+    this.physBoxes = (m.physBoxes ?? []).map(([x, y, w, h, rot]) => ({
+      x, y, width: w, height: h, rotation: rot ?? 0,
+    }));
+    // The SWF's literal box. Every Raze 2 map is laid out from the origin and
+    // fits inside it (largest is 2874x2848), so here the constant and the level
+    // extent coincide and `Unit.as:577` is reproduced exactly.
+    this.killBounds = { x0: 0, y0: 0, x1: 2880, y1: 2880 };
 
-    // Themed sky behind everything — the extracted backdrop art is transparent
-    // where the sky was a separate SWF layer, so without this the empty areas
-    // read as a black void. Drawn oversized and parallax-scrolled in enterFrame
-    // so it drifts behind the collision-locked map art (depth).
-    this.buildSky(level, m.w, m.h);
+    // Authentic backdrop: the static sky, then the two parallax layers, all
+    // behind the map art. Falls back to the procedural gradient only for a map
+    // with no authored `BgSky` frame — without something back there the areas
+    // the map art leaves transparent read as a black void.
+    if (!this.buildBackdrop(level)) this.buildSky(level, m.w, m.h);
 
     const tex = Backgrounds.getTexture(level) as Texture | null;
     if (tex) {
@@ -353,14 +529,33 @@ export class Arena {
       this.view.addChild(sprite);
     }
 
+    // The map's authored animated props. `back` goes in here, straight over the
+    // map art; `front` is added above the units by GameScreen, because the SWF
+    // authors the conveyor machinery and lights above `midCont`.
+    this.props = new MapProps(level);
+    if (this.props.count) this.view.addChild(this.props.back);
+
     // Water reflection/tint band over any water terrain (sits above the map art
     // but below the actors). Cheap: a static darkened tint plus a quality-gated
     // animated surface shimmer. Self-gating — only maps with water get it.
     this.buildWater(m);
 
-    // Per-map ambient particles (dust/ember/snow/bubble), density gated by the
-    // particle-quality setting. Behind pickups/units, above the backdrop.
-    this.particles = new AmbientParticles(themeForMap(level), m.w, m.h);
+    // Authored reflection window (`reflectTake1`/`reflectShow1`). Added here,
+    // below the actors, so the copy shows *through* the map's own art rather
+    // than over the fighters it is reflecting.
+    if (m.reflect) {
+      this.reflection = new Reflection(m.reflect);
+      this.view.addChild(this.reflection.view);
+    }
+
+    // The map's authored ambient life — fairies, fish, waterfalls, vents,
+    // embers, leaves. Behind pickups/units, above the backdrop. The particle
+    // set is named after the map's geometry for every map this port ships.
+    this.particles = new MapParticles(
+      level.replace(/^r2_/, ""),
+      this.wallMask,
+      (x, y) => this.onSplash?.(x, y),
+    );
     this.view.addChild(this.particles.view);
 
     this.view.addChild(this.geo);
@@ -378,25 +573,36 @@ export class Arena {
       this.drawPads();
     }
 
-    // Spawn points, grounded against the mask.
+    // Spawn points, grounded against the mask. The third element is the team
+    // the author tagged the node with (`NodeSpawn.as:24-33` reads it off the
+    // instance name), which decides who may spawn there — see `teamSpawns`.
     this.spawnNodes = [];
-    for (const [x, y] of m.spawns) {
+    for (const [x, y, team] of m.spawns) {
       const gy = this.groundSpawn(x, y);
       if (gy === null) continue;
-      this.spawnNodes.push({ x, y: gy, name: "s" + this.spawnNodes.length, taken: false });
+      this.spawnNodes.push({
+        x, y: gy, name: "s" + this.spawnNodes.length, taken: false, team: team ?? 0,
+      });
     }
     if (!this.spawnNodes.length) {
-      this.spawnNodes = m.spawns.map(([x, y], i) => ({ x, y, name: "s" + i, taken: false }));
+      this.spawnNodes = m.spawns.map(([x, y, team], i) => ({
+        x, y, name: "s" + i, taken: false, team: team ?? 0,
+      }));
     }
+    this.assignSpawnSides();
     const mid = this.spawnNodes[Math.floor(this.spawnNodes.length / 2)];
     this.humanWP = { x: mid.x, y: mid.y };
+    this.authoredWaypoints = !!m.waypoints?.length;
     this.wayNodes = m.waypoints
       ? m.waypoints.map((w) => ({
           name: w.name,
           x: w.x,
           y: this.groundSpawn(w.x, w.y) ?? w.y,
           connects: w.connects.slice(),
-          actions: [],
+          // Jump zones are authored in world space, so they are NOT grounded
+          // like the node itself — the box is the volume you have to be inside,
+          // not a point on the floor.
+          actions: (w.actions ?? []).map((a) => ({ ...a })),
         }))
       : this.spawnNodes.map((s, i) => ({
           name: s.name,
@@ -415,6 +621,118 @@ export class Arena {
 
     this.geo.clear();
     this.spawnRaze2Pickups(m);
+  }
+
+  /**
+   * Build the authentic backdrop for a Raze 2 map. `Game.as:105-110` adds the
+   * three clips in this order, so the depth is `bgSky` → `bg2` → `bg1` → arena:
+   * **`bg2` is the far layer and `bg1` the near one**, which is also why `bg1`
+   * is always the bigger piece of art and sweeps further. Returns false if the
+   * map has no authored layers, so the caller can fall back to the gradient.
+   *
+   * All three are `new Bg()` / `new BgSky()` with no placement, so each clip's
+   * registration point sits at stage (0,0) and the art hangs off it by the
+   * baked `lx/ly` — the ruined-city skies, for one, overhang 134px to the left.
+   *
+   * The sky frame is the map's own unless the "lol cats" special mode is on,
+   * which swaps it for every map (`Arena.as:795`).
+   *
+   * The art is authored against the SWF's 800x600 stage while this port renders
+   * the world 1:1 into a viewport that is usually larger, so every layer is
+   * scaled by the view's oversize against that stage. That is not cosmetic: the
+   * `red` sky's gradient is exactly 800 wide, and only at that scale does it
+   * still reach both edges of the view.
+   */
+  private buildBackdrop(level: string): boolean {
+    const use = BgArt.forMap(level, skyOverride());
+    if (!use) return false;
+    const [stageW, stageH] = BgArt.rig.stage;
+    const s = Math.max(GAME_WIDTH / stageW, GAME_HEIGHT / stageH);
+
+    const add = (kind: "bg" | "sky", label: string) => {
+      const got = BgArt.layer(kind, label);
+      if (!got) return null;
+      const spr = new Sprite(got.tex);
+      spr.anchor.set(0, 0);
+      spr.scale.set(s);
+      this.view.addChild(spr);
+      return { spr, box: { w: got.f.w * s, h: got.f.h * s, lx: got.f.lx * s, ly: got.f.ly * s } };
+    };
+
+    // `bgSky` is never offset in EnterFrame — it just sits at its placement.
+    const sky = add("sky", use.sky);
+    if (sky) {
+      this.skySprite = sky.spr;
+      this.skyBox = { lx: sky.box.lx, ly: sky.box.ly };
+    }
+    const far = add("bg", use.bg2);
+    if (far) {
+      this.bg2 = far.spr;
+      this.bg2Box = far.box;
+    }
+    const near = add("bg", use.bg1);
+    if (near) {
+      this.bg1 = near.spr;
+      this.bg1Box = near.box;
+    }
+    return !!(this.skySprite || this.bg1 || this.bg2);
+  }
+
+  /**
+   * `Game.as:554`: `bgSky.gotoAndStop("tut_attack")` — swap the static backdrop
+   * for another authored frame mid-match. Only the tutorial's missile strike
+   * uses it (the "lol cats" override is applied at build time instead).
+   *
+   * The frames are different sizes, so the placement box has to be retaken or
+   * the new sky sits at the old one's offset; `updateBackdrop` picks it up on
+   * the next tick. Async because the frame is not part of the map's own preload
+   * set — it resolves within a frame or two and the swap simply lands late.
+   */
+  setSky(label: string): void {
+    void BgArt.ensureLayer("sky", label).then(() => {
+      const got = BgArt.layer("sky", label);
+      if (!got || !this.skySprite) return;
+      const [stageW, stageH] = BgArt.rig.stage;
+      const s = Math.max(GAME_WIDTH / stageW, GAME_HEIGHT / stageH);
+      this.skySprite.texture = got.tex;
+      this.skyBox = { lx: got.f.lx * s, ly: got.f.ly * s };
+    });
+  }
+
+  /**
+   * `Arena.as:1172-1175`, verbatim:
+   *
+   *     bgN.x = (WIDTH  - bgN.width)  * (arena.x / (WIDTH  - wall.width));
+   *     bgN.y = (HEIGHT - bgN.height) * (arena.y / (HEIGHT - wall.height));
+   *
+   * The ratio is the camera's position through its own clamped range, so each
+   * layer sweeps the whole of its own slack over the whole of the camera's
+   * travel. Both layers share the ratio — the depth difference is purely that a
+   * bigger layer has more slack to sweep. The sky is deliberately untouched.
+   *
+   * `bgN.x` moves the clip's *registration point*, not the corner of the art,
+   * hence the `lx/ly` term. `this.x/y` is the arena view's screen translation,
+   * i.e. the SWF's `arena.x`. A map no larger than the view has no camera
+   * travel and no denominator, so those axes just pin to 0.
+   */
+  private updateBackdrop(): void {
+    const denomX = GAME_WIDTH - this.worldW;
+    const denomY = GAME_HEIGHT - this.worldH;
+    const rx = denomX < 0 ? this.x / denomX : 0;
+    const ry = denomY < 0 ? this.y / denomY : 0;
+    // The arena view is itself translated by (this.x, this.y); these sprites
+    // are its children, so undo that to place them in screen space.
+    const place = (spr: Sprite | undefined, b: { w: number; h: number; lx: number; ly: number }) => {
+      if (!spr) return;
+      spr.x = -this.x + (GAME_WIDTH - b.w) * rx + b.lx;
+      spr.y = -this.y + (GAME_HEIGHT - b.h) * ry + b.ly;
+    };
+    place(this.bg1, this.bg1Box);
+    place(this.bg2, this.bg2Box);
+    if (this.skySprite) {
+      this.skySprite.x = -this.x + this.skyBox.lx;
+      this.skySprite.y = -this.y + this.skyBox.ly;
+    }
   }
 
   /**
@@ -479,17 +797,27 @@ export class Arena {
   }
 
   /**
-   * Scan the map's special-surface layer for water terrain and, if any exists,
-   * lay a cheap reflection band over it: a static darkened blue tint on every
-   * water cell plus a per-column surface line reused by the animated shimmer.
-   * No-op on maps with no water, so it is self-gating.
+   * Scan the map's special-surface layer for water and build the simulated
+   * surface over it (`Water.as` — see `game/Water.ts`).
+   *
+   * The original hands `setWater` a single authored rectangle per map. The port
+   * has no such rectangle, only the colour-keyed terrain layer, so the pools are
+   * recovered from it: take the topmost and bottommost water pixel in each
+   * column, then group runs of adjacent columns whose surfaces agree into one
+   * pool. That splits a map with two ponds at different heights into two, which
+   * is what the wave physics needs — a shared surface line across a bank would
+   * propagate waves through solid rock.
+   *
+   * The darkened tint underneath stays: it is the plane the reflections and the
+   * actors sit in front of. No-op on maps with no water, so it is self-gating.
    */
   private buildWater(m: Raze2MapDef): void {
     const wm = this.wallMask;
     if (!wm) return;
     const step = WATER_STEP;
     const g = new Graphics();
-    const surfaceTop = new Map<number, number>();
+    const top = new Map<number, number>();
+    const bottom = new Map<number, number>();
     let any = false;
     for (let x = 0; x < m.w; x += step) {
       for (let y = 0; y < m.h; y += step) {
@@ -497,22 +825,66 @@ export class Arena {
         if (!s || (s.type !== "waterShallow" && s.type !== "waterDeep")) continue;
         any = true;
         g.rect(x, y, step + 1, step + 1);
-        const cur = surfaceTop.get(x);
-        if (cur === undefined) surfaceTop.set(x, y); // first (topmost) hit in column
+        if (!top.has(x)) top.set(x, y); // first (topmost) hit in column
+        bottom.set(x, y + step);
       }
     }
     if (!any) {
       g.destroy();
       return;
     }
-    // Darkened water tint (the "reflection" plane the actors sit in front of).
+    // Darkened water tint (the plane the reflection and the actors sit in
+    // front of), then the live surface on top of it.
     g.fill({ color: 0x0a2a3a, alpha: 0.3 });
     this.hasWater = true;
     this.waterGfx = g;
     this.view.addChild(g);
-    this.waterSurface = [...surfaceTop.entries()].map(([x, y]) => ({ x, y }));
+
+    // `Arena.init` only simulates a surface when the level author dropped a
+    // `waterMC` on the frame, and among the shipped maps only ocean has one
+    // (a 1921x21 strip along the sea floor, where the fighting happens — the
+    // big blue mass above it is map art). Prefer that authored rectangle; the
+    // column grouping is the fallback for maps that have water terrain but no
+    // authored surface, which would otherwise be tinted mud you cannot ripple.
+    const bodies = m.water ? [m.water] : this.groupWaterColumns(top, bottom, step);
+    if (bodies.length) {
+      this.water = new Water(bodies);
+      this.view.addChild(this.water.view);
+    }
+    this.waterSurface = [...top.entries()].map(([x, y]) => ({ x, y }));
     this.waterShimmer = new Graphics();
     this.view.addChild(this.waterShimmer);
+  }
+
+  /**
+   * Collapse the per-column water scan into pool rectangles. A pool breaks when
+   * the columns stop being adjacent or when the surface steps by more than
+   * `WATER_JOIN` — two ponds at different heights are two pools.
+   */
+  private groupWaterColumns(
+    top: Map<number, number>, bottom: Map<number, number>, step: number,
+  ): WaterBody[] {
+    const xs = [...top.keys()].sort((a, b) => a - b);
+    const out: WaterBody[] = [];
+    let run: number[] = [];
+    const flush = () => {
+      if (run.length < 2) { run = []; return; }   // a single column is a puddle
+      const x0 = run[0];
+      const x1 = run[run.length - 1] + step;
+      const y = Math.min(...run.map((x) => top.get(x)!));
+      const yb = Math.max(...run.map((x) => bottom.get(x)!));
+      out.push({ x: x0, y, w: x1 - x0, h: Math.max(step, yb - y) });
+      run = [];
+    };
+    for (const x of xs) {
+      const prev = run[run.length - 1];
+      if (prev !== undefined && (x - prev > step || Math.abs(top.get(x)! - top.get(prev)!) > WATER_JOIN)) {
+        flush();
+      }
+      run.push(x);
+    }
+    flush();
+    return out;
   }
 
   /** Spawn a Raze 2 map's pickups from its node data (`{p|w}_{kind}_{secs}`). */
@@ -526,13 +898,20 @@ export class Arena {
       const gy = this.groundSpawn(x, y) ?? y;
       if (prefix === "w") {
         const type = kind === "rand" ? "random" : WEAPONS[kind] ? kind : "random";
-        const spec: PickupWeaponSpec = { id: `weap_${kind}_${x}`, type, x, y: gy - 14, respawnSecs: respawn };
+        // On the ground, not 14px above it: the node's own art is the lit stand
+        // the gun floats over, and it is anchored by its base.
+        const spec: PickupWeaponSpec = { id: `weap_${kind}_${x}`, type, x, y: gy, respawnSecs: respawn };
         const p = new PickupWeapon(spec, wm);
         this.weapPickups.push(p);
         this.view.addChild(p.view);
       } else {
-        const ik = RAZE2_ITEM_KIND[kind] ?? "health";
-        const spec: PickupItemSpec = { id: `item_${kind}_${x}`, kind: ik as PickupItemSpec["kind"], x, y: gy - 8, respawnSecs: respawn };
+        // Fall back to health so a map still populates, but say so: silently
+        // substituting is what hid `sshield` and `bhealth` being unmapped.
+        const ik = RAZE2_ITEM_KIND[kind];
+        if (!ik && import.meta.env.DEV) {
+          console.warn(`[arena] unknown Raze 2 pickup kind "${kind}" — using health`);
+        }
+        const spec: PickupItemSpec = { id: `item_${kind}_${x}`, kind: (ik ?? "health") as PickupItemSpec["kind"], x, y: gy - 8, respawnSecs: respawn };
         const p = new PickupItem(spec);
         this.itemPickups.push(p);
         this.view.addChild(p.view);
@@ -666,6 +1045,7 @@ export class Arena {
     for (const [x, y, w, h] of platforms) this.wall(x, y, w, h);
 
     this.spawnNodes = spawns.map(([x, y], i) => ({
+      team: 0,
       x,
       y,
       name: "s" + i,
@@ -993,6 +1373,51 @@ export class Arena {
     this.geo.stroke({ color: 0x7a9ab5, width: 2.5, alpha: 0.9 });
   }
 
+  /**
+   * The static geometry the ragdoll world is built from.
+   *
+   * A Raze 1 level's `walls` are its real collision, so corpses use them. A
+   * Raze 2 map's collision is the pixel mask, which Box2D cannot consume — the
+   * SWF hands `PhysWorld.generateWorld` the authored `NodePhysBox` clips
+   * instead, and most maps ship none at all.
+   */
+  get corpseGeometry(): WallRect[] {
+    return this.wallMask ? this.physBoxes : this.walls;
+  }
+
+  /**
+   * Which authored side each team spawns on this match.
+   *
+   * `Arena.as:846-855` flips a coin at build time and sorts the markers
+   * accordingly, so the side team 1 starts on is not fixed — over a session you
+   * get both ends of the map. Stored rather than rolled per lookup so every
+   * unit in one match agrees.
+   */
+  private sideFlip = false;
+
+  private assignSpawnSides(): void {
+    this.sideFlip = Math.random() < 0.5;
+  }
+
+  /**
+   * The pool `team` may spawn in.
+   *
+   * `Unit.getSpawnNode()` takes the team pool **only in Capture the Flag**;
+   * every other mode — including Team Deathmatch and Domination — draws from
+   * the neutral (team 0) list. The port used to hand out every node regardless,
+   * which let CTF teams spawn in the enemy base and let free-for-all use the
+   * base spawns the original keeps out of the pool.
+   */
+  spawnsFor(team: number, ctf: boolean): SpawnNode[] {
+    if (ctf && team) {
+      const side = this.sideFlip ? (team === 1 ? 2 : 1) : team;
+      const pool = this.spawnNodes.filter((s) => s.team === side);
+      if (pool.length) return pool;
+    }
+    const neutral = this.spawnNodes.filter((s) => !s.team);
+    return neutral.length ? neutral : this.spawnNodes;
+  }
+
   /** True if the point is inside a solid wall. Pixel-mask maps (Raze 2) sample
    *  the mask; rect maps (Raze 1) test the wall rects. Used by bullets and
    *  projectiles as well as unit collision, so both must respect the mask. */
@@ -1011,6 +1436,48 @@ export class Arena {
     return false;
   }
 
+  /**
+   * Height of the walkable slope surface at world-x `px`, or null if no slope
+   * spans that x within `band` of `nearY`.
+   *
+   * A level has many slopes at different heights (stacked decks, a ramp under a
+   * walkway), so this picks the one closest to the probe height rather than the
+   * highest — otherwise standing on a lower ramp would snap the unit up to the
+   * deck above it.
+   */
+  slopeYAt(px: number, nearY: number, band: number): number | null {
+    let best: number | null = null;
+    let bestGap = Infinity;
+    for (const s of this.slopes) {
+      if (px < s.x0 || px > s.x1) continue;
+      const t = (px - s.x0) / (s.x1 - s.x0 || 1);
+      const y = s.y0 + (s.y1 - s.y0) * t;
+      const gap = Math.abs(y - nearY);
+      if (gap <= band && gap < bestGap) {
+        bestGap = gap;
+        best = y;
+      }
+    }
+    return best;
+  }
+
+  /** Gradient (dy/dx) of the slope carrying `px` at `nearY`, or 0 if none. */
+  slopeGradientAt(px: number, nearY: number, band: number): number {
+    let best = 0;
+    let bestGap = Infinity;
+    for (const s of this.slopes) {
+      if (px < s.x0 || px > s.x1) continue;
+      const run = s.x1 - s.x0 || 1;
+      const y = s.y0 + (s.y1 - s.y0) * ((px - s.x0) / run);
+      const gap = Math.abs(y - nearY);
+      if (gap <= band && gap < bestGap) {
+        bestGap = gap;
+        best = (s.y1 - s.y0) / run;
+      }
+    }
+    return best;
+  }
+
   getNode(i: number): WayNode {
     return this.wayNodes[i];
   }
@@ -1021,9 +1488,13 @@ export class Arena {
   enterFrame(): void {
     this.tick++;
 
+    // Authentic two-layer parallax + static sky.
+    this.updateBackdrop();
+
     // Themed sky parallax: slide the oversized sky at SKY_PARALLAX of the
     // camera speed so it drifts behind the collision-locked map art. `this.x/y`
     // are the arena view's screen translation (set by GameScreen.updateCamera).
+    // Fallback path only — a map with authored layers has no `skyG`.
     if (this.skyG) {
       const Z = CAMERA_ZOOM;
       const k = (SKY_PARALLAX - 1) / Z; // negative: sky lags the world scroll
@@ -1031,12 +1502,15 @@ export class Arena {
       this.skyG.y = this.skyHomeY + this.y * k;
     }
 
-    // Water surface shimmer — gated by the "Lights & Reflections" quality knob
-    // (glow is off on Low / no-glow), so cheap hardware skips it entirely.
+    // Water surface shimmer. This is a port invention that stood in for the
+    // wave simulation, so it only runs where there is no simulated surface —
+    // a pool that has real waves does not want a second, static highlight
+    // sliding along a line the waves have long since left. Gated by the
+    // "Lights & Reflections" knob, so cheap hardware skips it entirely.
     if (this.waterShimmer) {
       const g = this.waterShimmer;
       g.clear();
-      if (this.hasWater && Quality.glow) {
+      if (this.hasWater && !this.water && Quality.glow) {
         const t = this.tick;
         for (const p of this.waterSurface) {
           const a = 0.08 + 0.12 * Math.max(0, Math.sin(p.x * 0.02 + t * 0.08));
@@ -1045,8 +1519,14 @@ export class Arena {
       }
     }
 
-    // Ambient theme particles (dust/ember/snow/bubble).
-    this.particles?.update(this.x, this.y, CAMERA_ZOOM);
+    // The map's authored ambient particles. The camera goes in because the
+    // emitters only spawn near the view, and the water surface because the
+    // jungle's big fall keeps the pool under it rippling.
+    this.particles?.enterFrame(this, this.water ?? undefined);
+
+    // The authored prop clips (gears, conveyor treads, lights, and whatever
+    // set-piece the mission script has told to play).
+    this.props?.enterFrame();
 
     // Jump pads are drawn by the map's own background art (no procedural glyph),
     // so there is nothing to animate per frame here.
@@ -1054,6 +1534,25 @@ export class Arena {
 
   /** Pad a grounded unit's feet (px, feetY) sit on, or null. */
   jumpPadAt(px: number, feetY: number): JumpPad | null {
+    // On a pixel-mask map the pads live in the *per-frame* special layer, so
+    // read them from the mask that is currently staged rather than from the
+    // static `jumpPads` list, which is built once from the map JSON (i.e. from
+    // frame 1). The tutorial restages that layer as each step clears and
+    // deletes its diagonal pad from frame 5 on, once the shortcut it exists to
+    // provide has been used — keeping the frame-1 list alive left a pad in the
+    // world for the rest of the walkthrough that fires you back across the map
+    // to a beat you have already finished.
+    const wm = this.wallMask;
+    if (wm) {
+      // Same +/-8px vertical slack the rect test allows, so standing flush on
+      // the pad's top pixel still counts.
+      for (let dy = -8; dy <= 8; dy += 4) {
+        const hit = wm.jumpPadAt(px, feetY + dy);
+        if (hit) return { x: px, y: feetY, w: 0, h: 0, power: hit.power, dirX: hit.dirX };
+      }
+      return null;
+    }
+    // Rect (Raze 1) levels have no mask; their pads are the extracted list.
     for (const p of this.jumpPads) {
       if (px >= p.x && px <= p.x + p.w && feetY >= p.y - 8 && feetY <= p.y + p.h + 8) {
         return p;

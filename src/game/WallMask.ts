@@ -77,6 +77,14 @@ const SURFACE_TABLE: Record<number, SpecialEntry> = {
   // A wall the player has to shoot open; painted on solid geometry, so it is
   // only ever found by a bullet's impact test.
   0x9900ff: surf("tutWall", {}),
+  // --- secret-achievement markers: also inert, touching/shooting is the whole
+  // mechanic. `Unit.as:770-776` awards on contact, `Bullet.as:426-474` on a hit.
+  // Without these the colours decode as plain ground and all four secrets — and
+  // so the four special modes they unlock — are unreachable by any means.
+  0xffff02: surf("secretCat", {}), //     "Oh Hi Kitty"       -> lol cats
+  0xffff04: surf("secretHeart", {}), //   "Love is Blind"     -> 4x Health
+  0xffff06: surf("secretMoon", {}), //    "Reach for the Sky" -> Moon Corpses
+  0x006600: surf("foliage", {}), //       400 shots fired     -> Unlimited Ammo
   // --- jump pads: straight tiers ---
   0x00fff1: pad(1.2, 0), 0x00fff2: pad(1.4, 0), 0x00fff3: pad(1.6, 0),
   0x00fff4: pad(1.75, 0), 0x00fff5: pad(1.9, 0), 0x00fff6: pad(2.2, 0),
@@ -85,6 +93,13 @@ const SURFACE_TABLE: Record<number, SpecialEntry> = {
   0x00ccff: pad(1.8, -28), 0x00ccf3: pad(0.9, 37), 0x00ccf9: pad(1.2, -40),
   0x00ccf4: pad(1.3, 55), 0x00ccf8: pad(1.3, -55),
 };
+
+/** The special-layer entry a wall-bitmap colour decodes to, or undefined for a
+ *  colour the game assigns no meaning (which reads as plain ground). Exposed so
+ *  the marker colours can be asserted without rasterising a mask. */
+export function surfaceForColor(rgb: number): SpecialEntry | undefined {
+  return SURFACE_TABLE[rgb];
+}
 
 /**
  * Pixel-mask collision for the Raze 2 maps.

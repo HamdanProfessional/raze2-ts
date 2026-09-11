@@ -60,8 +60,11 @@ export class PartFigure {
       const tex = PartArt.getTexture(p.cid, cn);
       if (tex) sp.texture = tex;
       sp.visible = !!tex;
+      // SWF MATRIX order carries over to Pixi 1:1 — see Unit.updateParts for
+      // why, and for the check that settled it. Transposing here mirrored every
+      // limb's rotation.
       const m = p.m;
-      sp.setFromMatrix(new Matrix(m[0], m[2], m[1], m[3], m[4], m[5]));
+      sp.setFromMatrix(new Matrix(m[0], m[1], m[2], m[3], m[4], m[5]));
     }
     for (const [d, sp] of this.sprites) if (!used.has(d)) sp.visible = false;
 

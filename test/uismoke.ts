@@ -37,6 +37,7 @@ import type { Screen, ScreenClass } from "../src/core/Screen";
 import { MenuScreen } from "../src/screens/MenuScreen";
 import { CampaignScreen } from "../src/screens/CampaignScreen";
 import { StatsScreen } from "../src/screens/StatsScreen";
+import { Achievements, R2_ACH_IDS } from "../src/game/Achievements";
 import { InfoScreen } from "../src/screens/InfoScreen";
 
 let requested: ScreenClass | null = null;
@@ -148,6 +149,55 @@ SD.init();
   if ((s as any).toast.visible) throw new Error("success message never faded out");
   s.destructor();
   console.log("StatsScreen: reset confirmation, clear and toast ok");
+}
+
+// --- the achievements list is a list, not a trophy case ---------------------
+// The menu's ACHIEVEMENTS entry routes here, and the panel used to show only
+// medals already earned. Four of the ten achievements are secrets whose only
+// hint is their own description, so a filtered list made them undiscoverable:
+// all ten must be present whether locked or not.
+{
+  SD.medals = {} as any;
+  const s = make(StatsScreen);
+  const texts = (s as any).medalsContent.children
+    .filter((c: any) => typeof c.text === "string")
+    .map((c: any) => c.text as string);
+  for (const id of R2_ACH_IDS) {
+    const m = Achievements.getAch(id);
+    if (!texts.includes(m.name)) throw new Error(`achievement "${id}" is missing from the list`);
+    if (!texts.includes(m.desc)) throw new Error(`achievement "${id}" lists no hint text`);
+  }
+  // A list that overflows its panel has to be reachable.
+  if ((s as any).maxScroll <= 0) throw new Error("ten rows fit the panel? the scroller is dead");
+  key("ArrowDown");
+  if ((s as any).scroll === 0) throw new Error("arrow keys do not scroll the award list");
+  for (let i = 0; i < 50; i++) key("ArrowDown");
+  if ((s as any).scroll !== (s as any).maxScroll) throw new Error("scroll did not clamp at the end");
+  for (let i = 0; i < 60; i++) key("ArrowUp");
+  if ((s as any).scroll !== 0) throw new Error("scroll did not clamp at the top");
+  // ...but not while the modal is up.
+  (s as any).askReset();
+  key("ArrowDown");
+  if ((s as any).scroll !== 0) throw new Error("the list scrolled behind the confirm dialog");
+  key("Escape");
+  s.destructor();
+
+  // Earned medals join the list below the achievements; earned achievements
+  // stay in place rather than duplicating.
+  SD.medals = { headshot: true, cat: true } as any;
+  const s2 = make(StatsScreen);
+  const names = (s2 as any).medalsContent.children
+    .filter((c: any) => typeof c.text === "string")
+    .map((c: any) => c.text as string);
+  if (!names.includes(Achievements.getAch("headshot").name)) {
+    throw new Error("an earned Raze 1 medal dropped off the list");
+  }
+  if (names.filter((t: string) => t === Achievements.getAch("cat").name).length !== 1) {
+    throw new Error("an earned achievement was listed twice");
+  }
+  s2.destructor();
+  SD.medals = {} as any;
+  console.log("StatsScreen: all 10 achievements list (locked included), scroll clamps, medals append");
 }
 
 // --- about / info screen ---------------------------------------------------

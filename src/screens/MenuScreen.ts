@@ -211,7 +211,7 @@ export class MenuScreen extends Screen {
 
   private go(ScreenCtor: ScreenClass): void {
     Sound.resume();
-    this.engine.setScreen(ScreenCtor);
+    this.engine.setScreen(ScreenCtor, undefined, "slideLeft");
   }
 
   private playRaze1(): void {

@@ -54,7 +54,12 @@ export const LOADOUT_MAX = 7;
 /** Guns the player spawns carrying (index 0 = primary, held at spawn).
  *  Filtered to only guns still owned + defined. */
 export function equippedGuns(): string[] {
-  return (SD.profile.prof_guns ?? []).filter((id) => isGunUnlocked(id) && WEAPONS[id]);
+  // Capped here as well as repaired in `ensureLoadout`: this is what every
+  // readout counts, so it must never be able to report more than the rack can
+  // physically hold, whatever an older profile happens to have stored.
+  return (SD.profile.prof_guns ?? [])
+    .filter((id) => isGunUnlocked(id) && WEAPONS[id])
+    .slice(0, LOADOUT_MAX);
 }
 
 /**
@@ -98,9 +103,28 @@ export function loadoutFull(): boolean {
  */
 export function ensureLoadout(): void {
   const list = SD.profile.prof_guns ?? (SD.profile.prof_guns = []);
-  if (list.length) return;
-  list.push(...GUN_ORDER);
-  SD.save();
+  if (!list.length) {
+    list.push(...GUN_ORDER);
+    SD.save();
+    return;
+  }
+  // Repair a stored loadout that can no longer be honoured. Profiles persist
+  // across builds, so one saved when the rack was larger keeps every gun it had
+  // — `loadoutGuns` already trims that down for play, but nothing ever fixed
+  // the stored list, so the armory went on reporting "8 / 7 CARRIED" and
+  // `equipGun` refused every new gun because the list was already over cap.
+  // Also drops duplicates and anything since sold or removed from the catalog.
+  const seen = new Set<string>();
+  const fixed = list.filter((id) => {
+    if (seen.has(id) || !WEAPONS[id] || !isGunUnlocked(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  fixed.length = Math.min(fixed.length, LOADOUT_MAX);
+  if (fixed.length !== list.length || fixed.some((id, i) => id !== list[i])) {
+    SD.profile.prof_guns = fixed;
+    SD.save();
+  }
 }
 
 /** Random-drop pool for a match: the default arsenal + the player's purchases. */

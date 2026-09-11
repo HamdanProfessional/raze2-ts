@@ -1,5 +1,6 @@
 import { Graphics } from "pixi.js";
 import { Sound } from "../audio/Sounds";
+import { objectiveColor, teamName } from "../ui/raze2/palette";
 
 /**
  * CTF and Domination objective controller (Raze 2 modes). Ticked once per frame
@@ -16,7 +17,10 @@ import { Sound } from "../audio/Sounds";
  * one to its team's score.
  */
 
-const TEAM_COLOR: Record<number, number> = { 0: 0x9aa7b4, 1: 0xff5a4d, 2: 0x4aa3ff };
+// Objective tints come from the shared Raze 2 ramp. This file used to carry its
+// own {1: red, 2: blue} table, which is backwards twice over: Raze 2 has no red
+// team at all, and the local player is always team 1 — so your own flag and
+// captured points rendered enemy-red while the enemy's rendered friendly-blue.
 const CTF_TOUCH = 46; // flag stand touch radius (world px)
 const DOM_TOUCH = 62; // control-point capture radius
 const DOM_CAPTURE = 30; // frames of uncontested presence to flip a point (~1s)
@@ -30,6 +34,12 @@ interface UnitLike {
   human: boolean;
   status: { dead: boolean };
   hasFlag: Flag | null;
+  /** True when this unit's rig has the back slot and is wearing the flag
+   *  itself, so nothing needs to be drawn for it here. */
+  wearsBackSlot?: boolean;
+  /** Standing on a control point this unit's team does not own. Set by
+   *  `tickDom`; read by the kill-bonus dispatch. */
+  capturing?: boolean;
 }
 
 interface Flag {
@@ -91,6 +101,10 @@ export class Objectives {
     // Return any flag whose carrier has died.
     for (const f of this.flags) {
       if (f.carrier && f.carrier.status.dead) {
+        // `Unit.as:331` — the flag snapping home is drawn where the carrier
+        // fell, in that flag's own colour, not at the stand it returns to. It
+        // is the cue that tells the killer the return actually happened.
+        this.game.addEffect(f.carrier.x, f.carrier.y - 50, `flagReset${f.team}`);
         f.carrier.hasFlag = null;
         f.carrier = null;
       }
@@ -103,7 +117,7 @@ export class Objectives {
             f.carrier = u;
             u.hasFlag = f;
             Sound.playSynthAt?.("whoosh", u.x, u.y, 0.5, 700);
-            this.game.hud?.addMessage?.(`${u.human ? "You" : "Enemy"} took the flag!`, TEAM_COLOR[f.team === 1 ? 2 : 1]);
+            this.game.hud?.addMessage?.(`${u.human ? "You" : "Enemy"} took the flag!`, objectiveColor(f.team === 1 ? 2 : 1));
           }
         } else if (u.hasFlag && this.near(u, f.x, f.y, CTF_TOUCH)) {
           // Own stand while carrying the enemy flag → capture.
@@ -112,19 +126,24 @@ export class Objectives {
           u.hasFlag = null;
           this.game.teamScore[u.team] = (this.game.teamScore[u.team] ?? 0) + 1;
           Sound.play?.("Medal");
-          this.game.hud?.addMessage?.(u.human ? "Flag captured!" : "Enemy captured the flag!", TEAM_COLOR[u.team]);
+          this.game.hud?.addMessage?.(u.human ? "Flag captured!" : "Enemy captured the flag!", objectiveColor(u.team));
         }
       }
     }
   }
 
   private tickDom(): void {
+    // `Unit.capturing` is read by the kill-bonus dispatch ("Defender!" for
+    // killing a unit mid-capture, and its mirror for scoring one while you are
+    // taking a point yourself), so it is recomputed from scratch each tick.
+    for (const u of this.liveUnits()) u.capturing = false;
     for (const p of this.points) {
       // Who is standing on the point?
       let t1 = false;
       let t2 = false;
       for (const u of this.liveUnits()) {
         if (!this.near(u, p.x, p.y, DOM_TOUCH)) continue;
+        if (p.owner !== u.team) u.capturing = true;
         if (u.team === 1) t1 = true;
         else if (u.team === 2) t2 = true;
       }
@@ -138,7 +157,7 @@ export class Objectives {
           p.owner = sole;
           p.progress = 0;
           p.by = 0;
-          this.game.hud?.addMessage?.(`${sole === 1 ? "RED" : "BLUE"} captured a point!`, TEAM_COLOR[sole]);
+          this.game.hud?.addMessage?.(`${teamName(sole).toUpperCase()} captured a point!`, objectiveColor(sole));
         }
       } else {
         // Contested or empty: the challenge decays.
@@ -198,7 +217,7 @@ export class Objectives {
     g.clear();
     if (this.mode === "ctf") {
       for (const f of this.flags) {
-        const col = TEAM_COLOR[f.team];
+        const col = objectiveColor(f.team);
         // Base stand.
         g.rect(f.x - 3, f.y - 54, 6, 54).fill({ color: 0x2a3038 });
         g.circle(f.x, f.y, 6).fill({ color: col, alpha: 0.5 });
@@ -207,22 +226,27 @@ export class Objectives {
           g.moveTo(f.x + 3, f.y - 54).lineTo(f.x + 30, f.y - 46).lineTo(f.x + 3, f.y - 38).fill({ color: col });
         }
       }
-      // Carried flags ride above their carrier.
+      // A carrier normally *wears* the flag: Raze 2 puts it on the character's
+      // back slot (`NodeCtfFlag.capture` → `MC.body.ability.gotoAndStop("flag"
+      // + team)`), which the unit rig renders — see Unit.updateAbilitySlot.
+      // Only the rigs without that slot (the Raze 1 layered/baked bodies, which
+      // have no back attachment) still need a marker, or their carrier would be
+      // holding an invisible flag.
       for (const f of this.flags) {
-        if (!f.carrier) continue;
         const u = f.carrier;
-        g.moveTo(u.x, u.y - 96).lineTo(u.x + 22, u.y - 90).lineTo(u.x, u.y - 84).fill({ color: TEAM_COLOR[f.team] });
+        if (!u || u.wearsBackSlot) continue;
+        g.moveTo(u.x, u.y - 96).lineTo(u.x + 22, u.y - 90).lineTo(u.x, u.y - 84).fill({ color: objectiveColor(f.team) });
         g.rect(u.x - 1, u.y - 96, 2, 30).fill({ color: 0x2a3038 });
       }
     } else {
       for (const p of this.points) {
-        const col = TEAM_COLOR[p.owner];
+        const col = objectiveColor(p.owner);
         g.circle(p.x, p.y - 6, 18).stroke({ color: col, width: 3, alpha: 0.9 });
         g.circle(p.x, p.y - 6, 18).fill({ color: col, alpha: 0.18 });
         // Capture progress ring while contested.
         if (p.progress > 0) {
           const frac = p.progress / DOM_CAPTURE;
-          g.circle(p.x, p.y - 6, 22).stroke({ color: TEAM_COLOR[p.by], width: 3, alpha: 0.4 + frac * 0.6 });
+          g.circle(p.x, p.y - 6, 22).stroke({ color: objectiveColor(p.by), width: 3, alpha: 0.4 + frac * 0.6 });
         }
         // A little mast so the point reads as an objective.
         g.rect(p.x - 2, p.y - 60, 4, 54).fill({ color: 0x2a3038 });

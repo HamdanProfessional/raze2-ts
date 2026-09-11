@@ -1,5 +1,6 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import { GAME_WIDTH, GAME_HEIGHT, FPS } from "../core/Config";
+import { teamColor } from "../ui/raze2/palette";
 
 /**
  * Shared HUD building blocks: the palette, the panel chrome routines, the
@@ -71,15 +72,16 @@ export const C_GLOW_CYAN = 0x00cccc;
 /** Gametype caption teal (doc 14 §5). */
 export const C_TEAL = 0x57deb0;
 
-/** Team tints. 1 = red, 2 = blue; 0 (free-for-all) has no team colour. */
-export const C_TEAM1 = 0xe05a44;
-export const C_TEAM2 = 0x4a8ee0;
-
-/** Team tint for a unit-ish object, falling back to plain text white. */
+/**
+ * Team tint for a unit-ish object, falling back to plain text white for
+ * free-for-all (where nobody has a side).
+ *
+ * This used to key off a local `C_TEAM1 = 0xe05a44` / `C_TEAM2 = 0x4a8ee0` pair
+ * — a red-vs-blue table that shadowed the identically-named authentic constants
+ * in `ui/raze2/palette`. Raze 2 has no red team, so the ramp comes from there.
+ */
 export function teamColorOf(u: { team?: number } | null | undefined): number {
-  if (u?.team === 1) return C_TEAM1;
-  if (u?.team === 2) return C_TEAM2;
-  return C_TEXT;
+  return u?.team ? teamColor(u.team) : C_TEXT;
 }
 
 // --- text ------------------------------------------------------------------
@@ -220,6 +222,170 @@ export function drawSkull(g: Graphics, cx: number, cy: number, r: number, color 
   g.rect(cx - r * 0.07, cy + r * 0.16, r * 0.14, r * 0.16).fill({ color: 0x000000 });
   g.rect(cx - r * 0.13, cy + r * 0.34, r * 0.05, r * 0.42).fill({ color: 0x000000 });
   g.rect(cx + r * 0.08, cy + r * 0.34, r * 0.05, r * 0.42).fill({ color: 0x000000 });
+}
+
+/**
+ * Closed polygon from a flat x,y list. The headless stub implements moveTo /
+ * lineTo / closePath but not `poly`, so every angled shape below is built the
+ * long way round.
+ */
+function polyPath(g: Graphics, pts: number[]): void {
+  g.moveTo(pts[0], pts[1]);
+  for (let i = 2; i < pts.length; i += 2) g.lineTo(pts[i], pts[i + 1]);
+  g.closePath();
+}
+
+/** Blend two packed RGB colours, `t` 0..1. */
+function mixRGB(a: number, b: number, t: number): number {
+  const r = ((a >> 16) & 255) + (((b >> 16) & 255) - ((a >> 16) & 255)) * t;
+  const g = ((a >> 8) & 255) + (((b >> 8) & 255) - ((a >> 8) & 255)) * t;
+  const bl = (a & 255) + ((b & 255) - (a & 255)) * t;
+  return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(bl);
+}
+
+// --- score race bars (char 1494) -------------------------------------------
+/**
+ * Track geometry, measured off the symbol's own shape record: the art is
+ * 126.95 x 8.5 with the top edge sitting 2.95 to the right of the bottom, and
+ * `Hud.as:425` slides its mask across exactly 124px. So the *track* is 124 wide
+ * and the extra 2.95 is the lean.
+ */
+export const SCORE_BAR_W = 124;
+export const SCORE_BAR_H = 9;
+const SB_SKEW = 3;
+/** Steps in the banded vertical ramp (see `scoreBar`). */
+const SB_BANDS = 5;
+
+/** One horizontal slice of the leaning bar, `t0`..`t1` down its height. */
+function sbSlice(
+  g: Graphics,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  t0: number,
+  t1: number,
+): void {
+  const l0 = x + SB_SKEW * (1 - t0);
+  const l1 = x + SB_SKEW * (1 - t1);
+  polyPath(g, [l0, y + h * t0, l0 + w, y + h * t0, l1 + w, y + h * t1, l1, y + h * t1]);
+}
+
+/**
+ * `scorebars.bar1` / `bar2` — the one bar in the HUD that is not a plain rect: a
+ * right-leaning parallelogram under a two-stop vertical gradient. `top`/`bot`
+ * are the symbol's own gradient stops (see `BAR_GRAD` in Hud).
+ *
+ * The stub-safe primitive set has no gradient fills, so the ramp is banded into
+ * `SB_BANDS` slices — the same trade `razeGlass` makes, and invisible at 9px.
+ */
+export function scoreBar(
+  g: Graphics,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  per: number,
+  top: number,
+  bot: number,
+): void {
+  // Unfilled track. Deliberately no outline: the original floats these over the
+  // level with nothing behind them, and a stroke is what made them read as a
+  // widget rather than part of the scene.
+  sbSlice(g, x, y, w, h, 0, 1);
+  g.fill({ color: 0x000000, alpha: 0.5 });
+
+  const fw = clamp01(per) * w;
+  if (fw < 0.5) return;
+  for (let i = 0; i < SB_BANDS; i++) {
+    // Overlap into the next band so the seams never show as hairlines.
+    const t1 = i === SB_BANDS - 1 ? 1 : (i + 1) / SB_BANDS + 0.03;
+    sbSlice(g, x, y, fw, h, i / SB_BANDS, t1);
+    g.fill({ color: mixRGB(top, bot, (i + 0.5) / SB_BANDS) });
+  }
+  // Lit top edge, as on the symbol's lighter upper stop.
+  sbSlice(g, x, y, fw, h, 0, 0.18);
+  g.fill({ color: 0xffffff, alpha: 0.18 });
+}
+
+// --- gametype icon (`mc_gametype`) -----------------------------------------
+/**
+ * `mc_gametype.mc_type` has a frame per gametype (`Hud.as:186` does
+ * `gotoAndStop(MatchSettings.type)`), but FFDec flattens nested clips to their
+ * first frame, so the individual glyphs could not be lifted out of the SWF.
+ * These are redrawn in the same solid-silhouette language as the CTF flag badge
+ * (char 1509), which did export.
+ */
+export function drawModeGlyph(
+  g: Graphics,
+  mode: string,
+  cx: number,
+  cy: number,
+  r: number,
+  color = 0x14161c,
+): void {
+  switch (mode) {
+    case "ctf": {
+      // Pole leaning right, banner off its top-left with the original's wavy hem.
+      polyPath(g, [
+        cx + 0.30 * r, cy - 0.95 * r,
+        cx + 0.52 * r, cy - 0.95 * r,
+        cx + 0.30 * r, cy + 0.95 * r,
+        cx + 0.08 * r, cy + 0.95 * r,
+      ]);
+      g.fill({ color });
+      polyPath(g, [
+        cx + 0.34 * r, cy - 0.86 * r,
+        cx - 0.90 * r, cy - 0.58 * r,
+        cx - 0.82 * r, cy - 0.02 * r,
+        cx - 0.34 * r, cy - 0.18 * r,
+        cx + 0.06 * r, cy + 0.04 * r,
+        cx + 0.16 * r, cy - 0.42 * r,
+      ]);
+      g.fill({ color });
+      break;
+    }
+    case "dom":
+      // The capture node (`NodePickup`): a ring around a solid core.
+      g.circle(cx, cy, r * 0.78).stroke({ color, width: r * 0.26 });
+      g.circle(cx, cy, r * 0.30).fill({ color });
+      break;
+    case "jug":
+      // Crown — the juggernaut is the one everyone is hunting.
+      polyPath(g, [
+        cx - 0.90 * r, cy + 0.62 * r,
+        cx - 0.90 * r, cy - 0.66 * r,
+        cx - 0.42 * r, cy - 0.08 * r,
+        cx, cy - 0.80 * r,
+        cx + 0.42 * r, cy - 0.08 * r,
+        cx + 0.90 * r, cy - 0.66 * r,
+        cx + 0.90 * r, cy + 0.62 * r,
+      ]);
+      g.fill({ color });
+      break;
+    case "elim":
+    case "telim":
+      // Heart: elimination is the only mode scored in lives.
+      g.circle(cx - 0.36 * r, cy - 0.26 * r, r * 0.46).fill({ color });
+      g.circle(cx + 0.36 * r, cy - 0.26 * r, r * 0.46).fill({ color });
+      polyPath(g, [cx - 0.80 * r, cy - 0.04 * r, cx + 0.80 * r, cy - 0.04 * r, cx, cy + 0.90 * r]);
+      g.fill({ color });
+      break;
+    default:
+      drawSkull(g, cx, cy, r, color);
+  }
+}
+
+/**
+ * The `mc_gametype` badge: a light rounded plate carrying the mode glyph. The
+ * original reads as a bright chip against the level, not a dark disc — it is the
+ * only light element in the corner and that is what makes it findable.
+ */
+export function modePlate(g: Graphics, x: number, y: number, size: number, mode: string): void {
+  g.roundRect(x - 1, y - 1, size + 2, size + 2, size * 0.22).fill({ color: 0x000000, alpha: 0.5 });
+  g.roundRect(x, y, size, size, size * 0.2).fill({ color: 0xe6e8ea, alpha: 0.94 });
+  g.roundRect(x, y, size, size * 0.42, size * 0.2).fill({ color: 0xffffff, alpha: 0.5 });
+  drawModeGlyph(g, mode, x + size / 2, y + size / 2, size * 0.3);
 }
 
 /** A bar track plus its fill. `per` is clamped to 0..1. */

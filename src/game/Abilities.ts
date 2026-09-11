@@ -205,6 +205,8 @@ function apply(unit: any, ab: AbilityDef): void {
             attacker: unit,
             x: unit.facing,
             y: 0,
+            // The `sword` pseudo-gun is what "Slasher!" keys on.
+            cause: { gun: "sword" },
           });
           game.addEffect(other.x, other.y - 40 * other.scale, "blood");
         }
@@ -227,8 +229,8 @@ function apply(unit: any, ab: AbilityDef): void {
         splashMult: 0.7,
         speed: 3,
       };
-      const m = unit.getMuzzle(unit.aimRotation);
-      game.addFrameEffect(new Projectile(game, unit, def, m.x, m.y, unit.aimRotation));
+      const m = unit.getMuzzle(unit.fireRotation);
+      game.addFrameEffect(new Projectile(game, unit, def, m.x, m.y, unit.fireRotation));
       // Grenade throw cue: S_Whip — Unit.as:1279.
       Sound.playAt?.("R2_Whip", unit.x, unit.y);
       break;
@@ -254,6 +256,10 @@ function apply(unit: any, ab: AbilityDef): void {
       const nodes = game.arena?.spawnNodes ?? [];
       if (nodes.length) {
         const node = nodes[Math.floor(Math.random() * nodes.length)];
+        // `Unit.as:1292-1301` puts TWO effects at each end: the smoke the body
+        // displaces, then the flash. The port had only the flash, which read as
+        // the unit blinking rather than leaving anything behind.
+        game.addEffect(unit.x, unit.y - 30, "smoke_big");
         game.addEffect(unit.x, unit.y - 40 * unit.scale, "spawn");
         // Teleport departure: S_Jumppad at the old position — Unit.as:1293.
         Sound.playAt?.("R2_Jumppad", unit.x, unit.y);
@@ -261,7 +267,9 @@ function apply(unit: any, ab: AbilityDef): void {
         unit.y = node.y;
         unit.moving.vel = 0;
         if (unit.jumping) unit.jumping.vel = 0;
-        game.addEffect(unit.x, unit.y, "spawn");
+        game.addEffect(unit.x, unit.y - 30, "smoke_big");
+        // At torso height like the departure flash, not at the feet.
+        game.addEffect(unit.x, unit.y - 40 * unit.scale, "spawn");
         // Teleport arrival: S_Powerup at the new position — Unit.as:1300.
         Sound.playAt?.("R2_Powerup", unit.x, unit.y);
       }

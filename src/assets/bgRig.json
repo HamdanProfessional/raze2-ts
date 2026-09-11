@@ -1,0 +1,230 @@
+{
+ "stage": [
+  800,
+  600
+ ],
+ "maps": {
+  "jungle": {
+   "bg1": "",
+   "bg2": "dome",
+   "sky": "red"
+  },
+  "jungle2": {
+   "bg1": "dark",
+   "bg2": "dome",
+   "sky": "night"
+  },
+  "city": {
+   "bg1": "city",
+   "bg2": "city2",
+   "sky": "city"
+  },
+  "desert": {
+   "bg1": "dunes",
+   "bg2": "shipyard2",
+   "sky": "desert"
+  },
+  "ocean": {
+   "bg1": "oceanf",
+   "bg2": "oceanb",
+   "sky": "day"
+  },
+  "mines": {
+   "bg1": "mountainbig",
+   "bg2": "mountainsmall",
+   "sky": "city"
+  },
+  "mines2": {
+   "bg1": "mountainbig",
+   "bg2": "mountainsmall",
+   "sky": "mday"
+  },
+  "space": {
+   "bg1": "pillars",
+   "bg2": "pillarsmall",
+   "sky": "space"
+  },
+  "snow": {
+   "bg1": "snow",
+   "bg2": "snow2",
+   "sky": "day"
+  },
+  "tut": {
+   "bg1": "mountainbiglow",
+   "bg2": "mountainsmalllow",
+   "sky": "tut"
+  },
+  "tutq": {
+   "bg1": "mountainbiglow",
+   "bg2": "mountainsmalllow",
+   "sky": "tut"
+  }
+ },
+ "bg": {
+  "city": {
+   "w": 1388,
+   "h": 1137,
+   "lx": -0.2,
+   "ly": -116.0
+  },
+  "city2": {
+   "w": 1008,
+   "h": 846,
+   "lx": 4.8,
+   "ly": -183.0
+  },
+  "dark": {
+   "w": 801,
+   "h": 600,
+   "lx": -0.2,
+   "ly": 0.0
+  },
+  "dome": {
+   "w": 1103,
+   "h": 846,
+   "lx": -0.2,
+   "ly": 0.0
+  },
+  "dunes": {
+   "w": 1517,
+   "h": 369,
+   "lx": -0.2,
+   "ly": 392.0
+  },
+  "mountainbig": {
+   "w": 1162,
+   "h": 428,
+   "lx": 0.8,
+   "ly": 296.0
+  },
+  "mountainbiglow": {
+   "w": 1162,
+   "h": 428,
+   "lx": 0.8,
+   "ly": 296.0
+  },
+  "mountainsmall": {
+   "w": 890,
+   "h": 328,
+   "lx": -2.2,
+   "ly": 197.0
+  },
+  "mountainsmalllow": {
+   "w": 890,
+   "h": 328,
+   "lx": -2.2,
+   "ly": 277.0
+  },
+  "oceanb": {
+   "w": 1104,
+   "h": 817,
+   "lx": 5.8,
+   "ly": 489.0
+  },
+  "oceanf": {
+   "w": 1295,
+   "h": 920,
+   "lx": -10.2,
+   "ly": 500.0
+  },
+  "pillars": {
+   "w": 1700,
+   "h": 1207,
+   "lx": -104.2,
+   "ly": -50.0
+  },
+  "pillarsmall": {
+   "w": 1220,
+   "h": 834,
+   "lx": -0.2,
+   "ly": -50.0
+  },
+  "shipyard2": {
+   "w": 1012,
+   "h": 529,
+   "lx": -0.2,
+   "ly": 172.0
+  },
+  "snow": {
+   "w": 1517,
+   "h": 369,
+   "lx": -0.2,
+   "ly": 392.0
+  },
+  "snow2": {
+   "w": 1135,
+   "h": 277,
+   "lx": -0.2,
+   "ly": 372.0
+  }
+ },
+ "sky": {
+  "city": {
+   "w": 1066,
+   "h": 601,
+   "lx": -133.8,
+   "ly": -0.3
+  },
+  "day": {
+   "w": 1106,
+   "h": 980,
+   "lx": -2.8,
+   "ly": -230.3
+  },
+  "desert": {
+   "w": 1273,
+   "h": 801,
+   "lx": -200.8,
+   "ly": -0.3
+  },
+  "lol cats": {
+   "w": 1014,
+   "h": 1013,
+   "lx": -96.8,
+   "ly": -217.3
+  },
+  "mday": {
+   "w": 1237,
+   "h": 980,
+   "lx": -133.8,
+   "ly": -230.3
+  },
+  "night": {
+   "w": 1066,
+   "h": 679,
+   "lx": -133.8,
+   "ly": -38.3
+  },
+  "red": {
+   "w": 1066,
+   "h": 641,
+   "lx": -133.8,
+   "ly": -0.3
+  },
+  "space": {
+   "w": 1001,
+   "h": 801,
+   "lx": -180.8,
+   "ly": -140.3
+  },
+  "tut": {
+   "w": 1066,
+   "h": 601,
+   "lx": -133.8,
+   "ly": -0.3
+  },
+  "tut_attack": {
+   "w": 1066,
+   "h": 686,
+   "lx": -133.8,
+   "ly": -85.3
+  },
+  "tut_missile": {
+   "w": 1066,
+   "h": 615,
+   "lx": -133.8,
+   "ly": -14.3
+  }
+ },
+ "note": "Parallax layers baked from DefineSprite_1365 (bg) and 1421 (sky). w/h are the cropped CONTENT size \u2014 Flash's .width is the bounds, which is what Arena.as:1172-1175 divides by. lx/ly place that content against the symbol's registration point, which Game.as leaves at stage (0,0). `stage` is the SWF stage the art was authored against."
+}

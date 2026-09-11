@@ -519,12 +519,12 @@ export class CustomizeScreen extends Screen {
     SD.profile.pers = persForCostume(this.parts.head, this.parts.body, this.parts.legs);
     SD.save();
     Sound.play("R2_ClickGo");
-    this.engine.setScreen(MenuScreen);
+    this.engine.setScreen(MenuScreen, undefined, "slideRight");
   }
 
   private back(): void {
     Sound.play("R2_ClickBack");
-    this.engine.setScreen(MenuScreen);
+    this.engine.setScreen(MenuScreen, undefined, "slideRight");
   }
 
   enterFrame(dt: number): void {

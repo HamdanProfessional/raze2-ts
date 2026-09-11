@@ -794,7 +794,7 @@ export class ArmoryBrowseScreen extends Screen {
 
   private back(): void {
     Sound.play("R2_ClickBack");
-    this.engine.setScreen(ArmoryScreen);
+    this.engine.setScreen(ArmoryScreen, undefined, "slideRight");
   }
 
   enterFrame(): void {

@@ -3,7 +3,7 @@ import type { Body } from "planck";
 import { Container } from "pixi.js";
 import { PTM, FPS } from "../core/Config";
 import { UT } from "../core/UT";
-import { SD } from "../state/SD";
+import { PhysVap } from "./PhysVap";
 import { RdActor } from "./RdActor";
 import { RdGun } from "./RdGun";
 
@@ -37,6 +37,12 @@ export interface DeathImpulse {
 const TIME_STEP = 1 / FPS;
 const VELOCITY_ITERS = 10;
 const POSITION_ITERS = 8;
+/** Frames a dropped gun may stay awake before it is retired anyway (~15s). A
+ *  gun that lands normally sleeps within a second or two, so this only ever
+ *  catches the bodies that would otherwise never be cleaned up. */
+const GUN_MAX_AGE = 15 * FPS;
+/** `PhysActor.EnterFrame`: at `fc == 4 * 30` the corpse is handed to PhysVap. */
+const CORPSE_LIFE = 4 * FPS;
 
 export class Phys {
   readonly world: World;
@@ -46,12 +52,19 @@ export class Phys {
   actors: RdActor[] = [];
   guns: RdGun[] = [];
 
+  /** Turns four-second-old corpses into a rising ember cloud. */
+  readonly vap = new PhysVap();
+
+  /** The camera, so PhysVap can drop queued corpses that left the view. */
+  arena: { x: number; y: number } | null = null;
+
   private ground: Body;
 
   constructor(walls: WallRect[]) {
     this.world = new World(new Vec2(0, 10));
     this.ground = this.world.createBody();
     this.createGround(walls);
+    this.view.addChild(this.vap.view);
   }
 
   // --- construction ------------------------------------------------------
@@ -168,17 +181,24 @@ export class Phys {
       }
     }
 
-    // Corpse upkeep: settle fade + severed-head blood trail.
+    // Corpse upkeep: severed-head blood trail.
     for (const actor of this.actors) actor.advance();
 
     this.cleanupGuns();
     this.cleanupActors();
+    this.vap.enterFrame(this.arena);
   }
 
-  /** Remove dropped guns once they come to rest. */
+  /**
+   * Remove dropped guns once they come to rest — or once they have been around
+   * long enough that they clearly never will. The age fallback matters because
+   * a body wedged in a corner, jittering on a slope, or falling through a gap
+   * in the geometry never satisfies Box2D's sleep test, and on `isAwake()`
+   * alone it would hold its body and sprite for the whole match.
+   */
   private cleanupGuns(): void {
     this.guns = this.guns.filter((gun) => {
-      if (!gun.body.isAwake()) {
+      if (!gun.body.isAwake() || ++gun.age > GUN_MAX_AGE) {
         const view = gun.body.getUserData() as Container | null;
         if (view) view.destroy();
         gun.body.setUserData(null);
@@ -190,30 +210,25 @@ export class Phys {
   }
 
   /**
-   * Remove settled ragdolls whose unit has already respawned. In lives-mode,
-   * an eliminated unit (getScore == 0) keeps its corpse on the field.
+   * Retire four-second-old corpses into the vaporiser.
+   *
+   * `PhysActor.EnterFrame` does exactly this and nothing else — a corpse has a
+   * fixed lifetime in Raze 2, whether or not its owner has respawned and
+   * whether or not the body has come to rest. The port used to hold a corpse
+   * until its unit respawned *and* the ragdoll settled, which meant a body
+   * wedged in the geometry could stay for the whole match.
    */
   private cleanupActors(): void {
     this.actors = this.actors.filter((actor) => {
-      const keepCorpse = SD.matchSettings.lives && !actor.unit.getScore;
-      // Retire once the owner is back in play and the body has come to rest.
-      // `settled` is the reliable half of that test — see RdActor.settled.
-      const atRest = !actor.part_body.isAwake() || actor.settled;
-      if (!keepCorpse && actor.respawned && atRest) {
-        for (const part of actor.allParts) {
-          const view = part.getUserData() as Container | null;
-          if (view) view.destroy();
-          part.setUserData(null);
-          this.world.destroyBody(part);
-        }
-        return false;
-      }
-      return true;
+      if (actor.age < CORPSE_LIFE) return true;
+      this.vap.vaporize(actor);
+      return false;
     });
   }
 
   /** Tear down the whole world (screen teardown). */
   destroy(): void {
+    this.vap.destroy();
     this.view.destroy({ children: true });
   }
 }

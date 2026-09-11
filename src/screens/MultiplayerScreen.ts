@@ -363,7 +363,7 @@ export class MultiplayerScreen extends Screen {
 
   private enterLobby(): void {
     // We're in a room now — hand off. Import lazily to avoid a cycle.
-    void import("./LobbyScreen").then(({ LobbyScreen }) => this.engine.setScreen(LobbyScreen));
+    void import("./LobbyScreen").then(({ LobbyScreen }) => this.engine.setScreen(LobbyScreen, undefined, "slideLeft"));
   }
 
   private showToast(msg: string): void {
@@ -376,7 +376,7 @@ export class MultiplayerScreen extends Screen {
     Sound.play("R2_ClickBack");
     // Leaving the multiplayer flow entirely: drop the socket.
     Net.disconnect();
-    this.engine.setScreen(MenuScreen);
+    this.engine.setScreen(MenuScreen, undefined, "slideRight");
   }
 
   enterFrame(): void {

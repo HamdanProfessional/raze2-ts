@@ -240,9 +240,9 @@ export class ScoresScreen extends Screen {
 
     let by = Math.max(ly, 190);
     const stack: [string, (() => void) | undefined, boolean][] = [
-      ["Resume Game", () => { Sound.play("R2_ClickBack"); this.engine.setScreen(MenuScreen); }, false],
+      ["Resume Game", () => { Sound.play("R2_ClickBack"); this.engine.setScreen(MenuScreen, undefined, "slideRight"); }, false],
       ["View Scores", undefined, true],
-      ["Options", () => { Sound.play("R2_Click"); this.engine.setScreen(OptionsScreen); }, false],
+      ["Options", () => { Sound.play("R2_Click"); this.engine.setScreen(OptionsScreen, undefined, "slideLeft"); }, false],
       ["Quit Game", () => { Sound.play("R2_ClickGo"); this.engine.setScreen(MenuScreen); }, false],
     ];
     for (const [label, onClick, selected] of stack) {

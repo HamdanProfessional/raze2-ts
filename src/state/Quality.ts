@@ -18,6 +18,8 @@
  *                      budget: the oldest effect is retired when the cap is hit
  *   - `glow`           bright additive-looking flashes, tracer glow layers and
  *                      text drop-shadows
+ *   - `ragev`          whether a corpse evaporates into embers (PhysVap) at the
+ *                      end of its four seconds, or just vanishes
  *   - `maxFps`         render frame-rate cap (game logic always ticks at 30)
  *   - `stageQuality`   legacy value poked into `main._stage.quality`
  *
@@ -108,6 +110,20 @@ class QualityState {
   level: QualityLevel = "high";
   /** False when the player asked for no glow (or on the Low profile). */
   glow = true;
+  /**
+   * "Ragdoll evaporating" — whether a corpse comes apart into a rising ember
+   * cloud (PhysVap) or is simply removed. Independent of the quality level in
+   * the original: the presets set it, but the toggle overrides them.
+   */
+  ragev = true;
+  /**
+   * "Particles", 0..3 (Low/Medium/High/Ultra) — `SD.graphPart`. The per-map
+   * ambient emitters in `Stats_MapParticles` read this number directly: it is
+   * the literal loop bound for the waterfalls, the modulus for the leaf and
+   * snowfall rates, and the gate that switches the rising motes off at 0. It is
+   * NOT `particleScale`, which is the port's own multiplier on effect bursts.
+   */
+  graphPart = 2;
 
   particleScale = PROFILES.high.particleScale;
   detail = PROFILES.high.detail;
@@ -142,8 +158,10 @@ class QualityState {
    * Recompute every derived knob. Called by SD after load / newGame / any
    * settings change; notifies subscribers so live screens re-apply.
    */
-  set(level: QualityLevel, noGlow: boolean): void {
+  set(level: QualityLevel, noGlow: boolean, ragev = true, graphPart = 2): void {
     this.level = level;
+    this.ragev = ragev;
+    this.graphPart = Math.max(0, Math.min(3, graphPart | 0));
     const p = PROFILES[level];
     this.particleScale = p.particleScale;
     this.detail = p.detail;

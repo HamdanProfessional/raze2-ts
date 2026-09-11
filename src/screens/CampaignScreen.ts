@@ -355,7 +355,7 @@ export class CampaignScreen extends Screen {
       height: 40,
       onClick: () => {
         Sound.play("R2_ClickBack");
-        this.engine.setScreen(MenuScreen);
+        this.engine.setScreen(MenuScreen, undefined, "slideRight");
       },
     });
     back.view.x = 60;
@@ -373,7 +373,7 @@ export class CampaignScreen extends Screen {
       accent: C_ACCENT_UPGRADE,
       onClick: () => {
         Sound.play("R2_Click");
-        this.engine.setScreen(ArmoryScreen);
+        this.engine.setScreen(ArmoryScreen, undefined, "slideLeft");
       },
     });
     upgrades.view.x = startX - 20 - upgradesW;

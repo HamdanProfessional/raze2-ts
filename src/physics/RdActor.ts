@@ -6,13 +6,6 @@ import { Quality } from "../state/Quality";
 import { RdContainer, type PartKind, type PartSpec } from "./RdContainer";
 import type { Phys } from "./Phys";
 
-// Corpse settling, in 30Hz frames. A ragdoll holds full opacity while it is
-// still tumbling and interesting, then relaxes into the background so a long
-// match doesn't accumulate a field of equally-bright bodies.
-const SETTLE_START = 60; // ~2s
-const SETTLE_FADE = 45; // ~1.5s to reach SETTLE_ALPHA
-const SETTLE_ALPHA = 0.45;
-
 // A detached head trails blood for this many frames, one drop every few.
 const HEAD_TRAIL_FRAMES = 24;
 const HEAD_TRAIL_INTERVAL = 4;
@@ -34,7 +27,6 @@ const HEAD_TRAIL_INTERVAL = 4;
  */
 export class RdActor {
   unit: any;
-  respawned = false;
 
   part_body!: Body;
   part_head!: Body;
@@ -268,29 +260,31 @@ export class RdActor {
   }
 
   /**
-   * True once the corpse has finished relaxing. Used as a cleanup trigger:
-   * ragdolls resting on the arena floor rarely satisfy Box2D's sleep test (the
-   * jointed limb island keeps jittering below the threshold forever), so a
-   * stale corpse would otherwise never be retired.
-   */
-  get settled(): boolean {
-    return this.age >= SETTLE_START + SETTLE_FADE;
-  }
-
-  /**
-   * Per-frame corpse upkeep: the settle fade, and the blood trail off a
-   * severed head. Driven by Phys.enterFrame.
+   * Per-frame corpse upkeep: the blood trail off a severed head. Driven by
+   * Phys.enterFrame.
+   *
+   * The port used to fade a corpse to 45% once it stopped tumbling, so a long
+   * match didn't accumulate a field of equally-bright bodies. That was a port
+   * invention covering for corpses that outstayed their welcome; now that they
+   * evaporate on the original's four-second clock there is nothing to cover
+   * for, and `PhysActor` holds full opacity for its whole life.
    */
   advance(): void {
     this.age++;
     if (this.headOff) this.trailBlood();
-    if (this.age <= SETTLE_START) return;
-    const t = Math.min(1, (this.age - SETTLE_START) / SETTLE_FADE);
-    const alpha = 1 - t * (1 - SETTLE_ALPHA);
-    for (const b of this.allParts) {
-      const view = b.getUserData() as Container | null;
-      if (view) view.alpha = alpha;
+  }
+
+  /** Drop every body and display object. Ported from `PhysActor.destroy`. */
+  destroy(): void {
+    for (const part of this.allParts) {
+      const view = part.getUserData() as Container | null;
+      if (view) view.destroy();
+      part.setUserData(null);
+      this.rdPhys.world.destroyBody(part);
     }
+    this.allParts = [];
+    this.limbs = [];
+    this.headJoint = null;
   }
 
   /** Drip blood behind a severed head while it is still travelling. */

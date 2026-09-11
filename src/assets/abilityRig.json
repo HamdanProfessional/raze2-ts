@@ -1,0 +1,23 @@
+{
+ "note": "Back-attachment slot (MC.body.ability, DefineSprite_249). All frames share one canvas; `anchor` is the clip registration point as a fraction of it, so a sprite anchored there and placed on skinAnim's per-frame `ability` point lands right.",
+ "canvas": [
+  65.15,
+  76.95
+ ],
+ "anchor": [
+  0.67306,
+  0.50682
+ ],
+ "frames": [
+  "ammo",
+  "cloak",
+  "flag1",
+  "flag2",
+  "grenade",
+  "heal",
+  "mine",
+  "static",
+  "sword",
+  "teleport"
+ ]
+}

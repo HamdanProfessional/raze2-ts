@@ -28,6 +28,8 @@ export type PickupKind =
   | "health"
   | "healthBig"
   | "ddamage"
+  /** Rapid Fire: 2x fire rate, no ammo drain, every gun full-auto, 6.5 s. */
+  | "rapid"
   | "fade"
   | "invin"
   /** King-of-the-hill crown: makes whoever grabs it the Juggernaut. */
@@ -48,6 +50,8 @@ const COLORS: Record<PickupKind, number> = {
   health: 0x53c65a,
   healthBig: 0x9ee37d,
   ddamage: 0xff5a4d,
+  // The glow filter Status.as:477 puts on a rapid-fire unit (0xffbf00).
+  rapid: 0xffbf00,
   fade: 0xb887ff,
   invin: 0xffd45a,
   jug: 0xffcc33,
@@ -59,6 +63,7 @@ const LETTERS: Record<PickupKind, string> = {
   health: "H",
   healthBig: "H+",
   ddamage: "D",
+  rapid: "R",
   fade: "F",
   invin: "I",
   jug: "J",
@@ -89,6 +94,7 @@ interface UnitLike {
 const BANNER: Partial<Record<PickupKind, [string, number]>> = {
   ddamage: ["DOUBLE DAMAGE", 0xff5a4d],
   invin: ["INVINCIBLE", 0xffd45a],
+  rapid: ["RAPID FIRE", 0xffbf00],
 };
 
 /**
@@ -100,6 +106,13 @@ export class PickupItem {
   readonly spec: PickupItemSpec;
 
   private respawnTicks = 0;
+  /**
+   * Bobbing wrapper holding the vector fallback *and* the art sprite. Pixi v8
+   * deprecates parenting children to a Graphics, so the icon cannot hang off
+   * `g` — and it still has to rise and fall with it, hence a Container the bob
+   * is applied to rather than moving the two pieces separately.
+   */
+  private bobC = new Container();
   private g = new Graphics();
   private label!: Text;
   private icon: Sprite | null = null;
@@ -111,8 +124,9 @@ export class PickupItem {
     this.spec = spec;
     this.view.x = spec.x;
     this.view.y = spec.y;
+    this.bobC.addChild(this.g);
+    this.view.addChild(this.bobC);
     this.draw();
-    this.view.addChild(this.g);
   }
 
   /** Touch attempt by `unit`; returns true if it was picked up. */
@@ -138,7 +152,7 @@ export class PickupItem {
     if (!this.pickedUp) {
       // Idle bob so the floor pickup reads as a floating collectable.
       this.bob = (this.bob + 1) % 360;
-      this.g.y = Math.sin(this.bob * 0.08) * 2.5;
+      this.bobC.y = Math.sin(this.bob * 0.08) * 2.5;
       return;
     }
     if (this.respawnTicks <= 0) return;
@@ -154,6 +168,12 @@ export class PickupItem {
 
   private draw(): void {
     this.g.clear();
+    // Only ever called from the constructor today, but a second call would
+    // otherwise stack a fresh sprite on the old one.
+    if (this.icon) {
+      this.icon.destroy();
+      this.icon = null;
+    }
     // Authentic SWF floater icon when one exists (all items but the crown).
     const tex = PickupArt.getTexture(this.spec.kind);
     if (tex) {
@@ -162,7 +182,7 @@ export class PickupItem {
       // Normalise to a consistent on-map footprint (~26 px tall).
       const s = Math.min(1, 26 / (tex.height || 26));
       this.icon.scale.set(s);
-      this.g.addChild(this.icon);
+      this.bobC.addChild(this.icon);
       return;
     }
     // Fallback disc + letter (the Juggernaut crown).
@@ -183,7 +203,7 @@ export class PickupItem {
       }),
     });
     this.label.anchor.set(0.5);
-    this.g.addChild(this.label);
+    this.bobC.addChild(this.label);
   }
 
   private applyTo(unit: UnitLike): void {
@@ -213,6 +233,10 @@ export class PickupItem {
         break;
       case "ddamage":
         s.startStatus("ddamage");
+        unit.game.addEffect(unit.x, unit.y, "getDdamage");
+        break;
+      case "rapid":
+        s.startStatus("rapid");
         unit.game.addEffect(unit.x, unit.y, "getDdamage");
         break;
       case "fade":

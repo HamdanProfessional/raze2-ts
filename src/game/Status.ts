@@ -1,6 +1,12 @@
 import { UT } from "../core/UT";
 import { SD } from "../state/SD";
+import { RAZE2_WEAPON_BY_ID } from "../assets/raze2";
 import { canHarm } from "./Match";
+import type { KillCause } from "./KillBonus";
+
+/** One tick of burn damage: the `fire` pseudo-gun's `dmg`, on the port's ×10
+ *  HP scale (`Stats_Guns` row `fire`, dmg 1 → 10 here). */
+const FIRE_DAMAGE = (RAZE2_WEAPON_BY_ID.fire?.dmg ?? 1) * 10;
 
 /**
  * Health, shield, damage resolution and death. Distilled from Status.as.
@@ -25,12 +31,23 @@ export class Status {
   private invuln = 0;
 
   ddamageTimer = 0;
+  /** Frames left of Rapid Fire (`sRapid`). While >0 the gun's between-shot
+   *  delay is halved, no ammo is spent, and semi-auto guns repeat on a held
+   *  trigger. See `Guns.as:365/406/416`. */
+  rapidTimer = 0;
   fadeTimer = 0;
   invinTimer = 0;
   /** Frames left of Static Field's projectile-reflect window (sMirror in the
    *  original). While >0, incoming enemy projectiles near this unit are turned
    *  back on their sender (see enterFrame). Set by the `static` ability. */
   reflectTimer = 0;
+  /** Frames left burning (`sFire`). A weapon whose `extra.setFire` is N sets
+   *  this to N*30 on hit; every third frame it deals the `fire` pseudo-gun's
+   *  damage, credited to whoever lit you. Ablative Plating (`equips.critdef`)
+   *  makes you immune, and wading into water puts it out. */
+  fireTimer = 0;
+  /** Who set this unit alight — kill credit for the burn (`sFireUnit`). */
+  fireBy: any = null;
 
   // --- ability energy (Status.as enCur/enMax) ----------------------------
   /** Ability energy, 0..enMax. Spawns full (matches the SWF). */
@@ -131,6 +148,8 @@ export class Status {
     switch (kind) {
       case "spawn":  this.invuln = 30; break;
       case "ddamage": this.ddamageTimer = Math.round(450 * pu); break;
+      // `NodePickup.as:245` — 6.5 s, stretched by Power Extender like the rest.
+      case "rapid":   this.rapidTimer = Math.round(195 * pu); break;
       case "fade":    this.fadeTimer = Math.round(450 * pu); break;
       case "invin":   this.invinTimer = Math.round(300 * pu); break;
     }
@@ -171,10 +190,27 @@ export class Status {
    */
   doDamage(
     amount: number,
-    info: { attacker?: any; x: number; y: number; headShot?: boolean; region?: string },
+    info: {
+      attacker?: any;
+      x: number;
+      y: number;
+      headShot?: boolean;
+      region?: string;
+      /**
+       * Ignore spawn invulnerability and the invincibility power-up — the
+       * `param5` of `Status.as:204`, which skips the `sSpawn` / `sInvin` /
+       * `sMirror` guards. Only the arena-containment kill sets it, exactly as
+       * in the original: lava and the other hazards go through the normal path,
+       * so being invincible really does protect you from them.
+       */
+      bypass?: boolean;
+      /** What landed the blow — see `KillBonus.KillCause`. Carried through to
+       *  the kill so the bonus dispatch can read it. */
+      cause?: KillCause;
+    },
   ): boolean {
     if (this.dead) return false;
-    if (this.invuln > 0 || this.invinTimer > 0) return false;
+    if (!info.bypass && (this.invuln > 0 || this.invinTimer > 0)) return false;
 
     const equips: Record<string, number> = this.unit.equips ?? {};
 
@@ -190,6 +226,22 @@ export class Status {
       amount *= this.unit?.human ? from.status.dmgPlayerMod : from.status.dmgAiMod;
     }
 
+    // Friendly fire lands at 30% and is flagged as a betrayal, which costs the
+    // shooter the kill entirely (`Status.as:232-234`).
+    if (from && from !== this.unit && from.team && from.team === this.unit.team) {
+      amount *= 0.3;
+      info.cause = { ...info.cause, teamkill: true };
+    }
+
+    // "What Shield?" is decided here because it is the only place that can see
+    // the shield pool *before* the blow spends it: 20%+ up, and still fatal.
+    if (this.shCur >= this.shMax * 0.2) {
+      info.cause = { ...info.cause, noShield: true };
+    }
+
+    // A weapon that sets you alight does so on every hit, fatal or not.
+    if (info.cause?.setFire) this.setFire(info.cause.setFire, from);
+
     // Flux Capacitor: while any shield is up, all incoming damage is reduced
     // (value 0.8 = -20%) before it is soaked / carried to health.
     if (this.shCur > 0 && equips.shield) amount *= equips.shield;
@@ -202,6 +254,12 @@ export class Status {
       const soak = Math.min(this.shCur, amount);
       this.shCur -= soak;
       amount -= soak;
+      // `Status.as:354`: the blow that empties the pool pops the shield, at
+      // torso height rather than at the feet. Only on the transition to zero —
+      // shooting someone whose shield is already down does nothing.
+      if (this.shCur <= 0 && this.unit) {
+        this.unit.game?.addEffect?.(this.unit.x, this.unit.y - 40, "shieldbreak");
+      }
     }
     this.hpCur -= amount;
 
@@ -256,8 +314,10 @@ export class Status {
     y: number;
     headShot?: boolean;
     region?: string;
+    cause?: KillCause;
   }): void {
     this.dead = true;
+    this.fireTimer = 0;
     this.unit.killGuy(info);
   }
 
@@ -286,12 +346,54 @@ export class Status {
       p.vy = -p.vy;
       p.owner = this.unit;
       p.reflected = true;
+      // Remember whose shot this WAS. `Bullet.as:194` passes the original
+      // shooter along as `extra.reflect`, and the bonus dispatch reads it: back
+      // into its sender is "Reflection!", into a third party is "Thanks!".
+      p.reflectedFrom = owner;
     }
+  }
+
+  /**
+   * Set this unit alight (`Status.as:236-239`). `secs` is the weapon's
+   * `extra.setFire`, in seconds. Ablative Plating (`equips.critdef`) makes a
+   * unit fireproof outright — the original checks it here, not on the tick.
+   */
+  setFire(secs: number, by: any): void {
+    if (!secs || this.unit.equips?.critdef) return;
+    this.fireTimer = Math.round(secs * 30);
+    this.fireBy = by ?? null;
+  }
+
+  /** Put the fire out — wading into water (`Unit.as:1034/1041`). */
+  douseFire(): void {
+    this.fireTimer = 0;
+  }
+
+  /**
+   * Burn damage, `Status.as:541-562`. Every third frame while alight: a flame
+   * lick somewhere on the body and one tick of the `fire` pseudo-gun's damage,
+   * credited to whoever lit the fire so the kill (and its "Hot Hot Hot!" bonus)
+   * goes to them. The campaign's `dblFire` modifier trebles it.
+   */
+  private burnTick(): void {
+    if ((this.fireTimer - 1) % 3 === 0 && !this.dead) {
+      const u = this.unit;
+      u.game?.addEffect?.(u.x + UT.rand(-10, 10), u.y + UT.rand(-60, -5), "fexpand");
+      const mult = u.extra?.dblFire ? 3 : 1;
+      this.doDamage(FIRE_DAMAGE * mult, {
+        attacker: this.fireBy,
+        x: 0,
+        y: -1,
+        cause: { gun: "fire" },
+      });
+    }
+    this.fireTimer--;
   }
 
   enterFrame(): void {
     if (this.invuln > 0) this.invuln--;
     if (this.ddamageTimer > 0) this.ddamageTimer--;
+    if (this.rapidTimer > 0) this.rapidTimer--;
     if (this.fadeTimer > 0) {
       this.fadeTimer--;
       this.unit.view.alpha = 0.4;
@@ -303,6 +405,7 @@ export class Status {
       this.reflectTimer--;
       this.reflectProjectiles();
     }
+    if (this.fireTimer > 0) this.burnTick();
 
     const equips: Record<string, number> = this.unit.equips ?? {};
 

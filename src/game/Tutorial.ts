@@ -115,17 +115,24 @@ export class Tutorial {
 
   /** A shot landed on a `tutWall` panel. Steps 8 and 9 are gated on this. */
   shotWall(slot: number | undefined): void {
+    const props = this.game.arena.props;
     if (this.step === 8) {
       // The explosive pipe: anything sets it off, and it drops the panel below.
       this.game.hud.setTutCard(null);
       Sound.play("R2_rocketExplode");
       this.game.shakeCamera(10);
+      // The nav arrow has done its job; both remaining bridges take their first
+      // step of collapse (each `play()` runs on to that clip's next stop).
+      props?.get("arrow")?.setAlpha(0);
+      props?.get("bridge2")?.play();
+      props?.get("bridge3")?.play();
       this.send("g");
       this.advance();
     } else if (this.step === 9 && slot === 2) {
       // The panel itself only yields to a shotgun-class weapon — the point of
       // the beat is that you switch to the right tool.
       this.game.hud.setTutCard(null);
+      props?.get("bridge3")?.play();
       this.send("i", LINES.follow);
       this.advance();
     }
@@ -145,9 +152,17 @@ export class Tutorial {
         break;
       case 3:
         this.send("e");
+        // `Unit.as` case 2: the walkway you just crossed gives way behind you.
+        // This is the bridge's FIRST collapse — the missile later plays it on to
+        // its second. Without it the whole thing dropped at once on the strike,
+        // which reads as the missile felling a pipe you were nowhere near.
+        this.game.arena.props?.get("bridge")?.play();
         this.game.shakeCamera(4, 2);
         break;
       case 4:
+        // The missile is overhead two steps before it lands: the sky carries it
+        // while the escort is still talking (`Unit.as` case 3).
+        this.game.arena.setSky("tut_missile");
         this.missile = 1;
         break;
       case 6:
@@ -155,6 +170,10 @@ export class Tutorial {
         break;
       case 7:
         this.grantResupply();
+        // The nav arrow is authored at alpha 0 and only turned on here
+        // (`Unit.as:876`), for the walk down to the explosive pipe — step 8
+        // switches it straight back off.
+        this.game.arena.props?.get("arrow")?.setAlpha(1);
         this.say(LINES.f3);
         this.game.hud.setTutCard(CARDS.ability);
         break;
@@ -180,12 +199,31 @@ export class Tutorial {
     this.bombHit();
   }
 
-  /** `Game.tutBombHit`: the blast that clears step 5 and hurts you for it. */
+  /** `Game.tutBombHit`: the blast that clears step 5 and hurts you for it.
+   *
+   *  This is the beat the whole map is built around: two bridges give way, the
+   *  factory's conveyor dies, the sky turns, and the heart on the far wall goes
+   *  into its panic dance. */
   private bombHit(): void {
     Sound.play("R2_rocketExplode");
+    Sound.play("R2_Headshot1");
     Sound.play("R2_Static");
     Sound.setMusic("R2_Rose");
     this.game.shakeCamera(15);
+
+    const props = this.game.arena.props;
+    props?.get("bridge")?.play();
+    props?.get("bridge2")?.play();
+    props?.get("heart")?.gotoAndPlay("dance");
+    // The machinery is running until the strike knocks the power out; after
+    // this the gears and belts stay dead for the rest of the mission.
+    for (const g of props?.all("gear") ?? []) g.stop();
+    for (const t of props?.all("tread") ?? []) t.stop();
+    // The sky turns over and `whiteFlash_139` — a one-second white-out authored
+    // onto that very sky frame — covers the cut.
+    this.game.arena.setSky("tut_attack");
+    this.game.flashWhite();
+
     this.game.player.status.doDamage(BOMB_DAMAGE, {
       x: this.game.player.x,
       y: this.game.player.y,

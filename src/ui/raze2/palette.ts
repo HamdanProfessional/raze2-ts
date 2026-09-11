@@ -98,6 +98,28 @@ export const C_TEAM_FFA = 0x00ff00;
 /** FFA / no-team score text tint. */
 export const C_TEAM_FFA_TEXT = 0xffff99;
 
+/**
+ * Side names by team index. Raze 2 has **no red team** — the sides are Blue,
+ * Orange, Yellow and Green, and the local player is always Blue. Anything that
+ * captions a side reads from here so a stray "RED" can't creep back in.
+ */
+export const TEAM_NAMES = ["FFA", "Blue", "Orange", "Yellow", "Green"] as const;
+
+/** Side name for a team index; "FFA" for no team. */
+export function teamName(team: number | undefined): string {
+  return TEAM_NAMES[team ?? 0] ?? TEAM_NAMES[0];
+}
+
+/**
+ * Objective tint (CTF flags, Domination points). Same ramp as the nameplates,
+ * but team 0 here means *unclaimed* rather than free-for-all, so it gets a
+ * neutral grey instead of the FFA green.
+ */
+export const C_OBJECTIVE_NEUTRAL = 0x9aa7b4;
+export function objectiveColor(team: number | undefined): number {
+  return team ? teamColor(team) : C_OBJECTIVE_NEUTRAL;
+}
+
 // --- scoreboard row colours (View Scores) ----------------------------------
 // The scoreboard (`ScoreBoardBar`/symbol462) uses a DIFFERENT, richer team
 // ramp than the in-game nameplate bars above — each team block steps through

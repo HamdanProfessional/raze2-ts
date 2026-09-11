@@ -101,6 +101,26 @@ export function equipItem(id: string): boolean {
  * equipped item ids. Empty / unknown ids contribute nothing (matches the SWF,
  * where "Nothing" items write a `type:""` key no code consumes).
  */
+/**
+ * Resolve a per-class index triple into an equips map — the shape the campaign
+ * scripts use (`Stats_Equipment.getEquipment(cls, index)`).
+ *
+ * Indexes the raw catalog order, NOT `equipsForSlot`: that one filters out the
+ * "Nothing" placeholder and the unnamed 0-cost variants, and the scripted kits
+ * address exactly those (a zombie's cls-0 index 6 is the unnamed +100 health
+ * body, and index 0 in any class means "no item in this slot").
+ */
+export function resolveEquipIndices(idx: readonly number[] | undefined): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!idx) return out;
+  for (let cls = 0; cls < 3; cls++) {
+    const items = RAZE2_EQUIPMENT.filter((e) => e.cls === cls);
+    const e = items[idx[cls] ?? 0];
+    if (e && e.type) out[e.type] = e.value;
+  }
+  return out;
+}
+
 export function resolveEquips(equipIds: string[]): Record<string, number> {
   const out: Record<string, number> = {};
   for (const id of equipIds) {

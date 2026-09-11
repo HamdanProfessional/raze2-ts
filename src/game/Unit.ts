@@ -4,7 +4,9 @@ import { K } from "../core/K";
 import { SD } from "../state/SD";
 import { Score } from "./Score";
 import { Achievements } from "./Achievements";
-import { computeKillBonuses, killPoints } from "./KillBonus";
+import { computeKillBonuses, creditMod, tallyBonuses, type KillCause } from "./KillBonus";
+import { SPREE_ENDER_AT } from "./Score";
+import { SkinArt } from "../assets/SkinArt";
 import { Status } from "./Status";
 import { Guns } from "./Guns";
 import { getAbility } from "./Abilities";
@@ -15,6 +17,7 @@ import { AnimNoHead } from "../assets/AnimNoHead";
 import { HeadArt } from "../assets/HeadArt";
 import { PartArt } from "../assets/PartArt";
 import { SkinAnim } from "../assets/SkinAnim";
+import { AbilityArt } from "../assets/AbilityArt";
 import { Sound } from "../audio/Sounds";
 import type { SurfaceMods } from "./WallMask";
 import ARM_RIG from "../assets/armRig.json";
@@ -70,12 +73,10 @@ const ROOT_Y = RIG.rootY;
  *
  * The original live character does NOT use Box2D — it is a custom kinematic
  * controller (Box2D is only for death ragdolls / dropped guns). This reproduces
- * that model with the extracted constants: horizontal accel 2.3 (air 1.6),
- * max speed 12, jump impulse -15, gravity 0.8, terminal fall 20, plus a
+ * that model with the constants lifted from `Movement.as:40-62`: horizontal
+ * accel 2.1 (air 1.5), brake 1.7 (air 0.4, crouch 0.5), max speed 11, jump
+ * impulse 13, double jump 10, gravity 0.8, terminal fall 20 — plus a
  * separated-axis AABB collision pass against the arena's solid rectangles.
- *
- * Rendering is a placeholder stick-figure sized to the character until the real
- * sprite pipeline (task 7) is wired in; the death ragdoll already uses physics.
  */
 
 interface Moving {
@@ -154,6 +155,44 @@ const KNOCK_DECAY = 0.55;
 // staircase risers the slope collision is meshed into, so stepped slopes are
 // walked up smoothly instead of jamming the unit against each riser.
 const STEP_UP_MAX = 30;
+
+/**
+ * The arena box the SWF contains every unit inside (`Unit.as:577`). Anything
+ * outside it is killed by the environment.
+ *
+ * This is the last-resort net, not the primary containment — the boundary walls
+ * do that. It matters because the walls can be beaten: the x-pass pushes a unit
+ * out of a wall by the *smaller* overlap, so a unit driven past a boundary
+ * wall's centre (an explosion, weapon recoil, or simply 11px/tick of run speed
+ * into a 40px-thick wall) is ejected outwards instead of back into the level.
+ * It then rides the global floor plane — which exists at every x, not just
+ * inside the map — and can wedge there permanently, alive and unreachable.
+ */
+const ARENA_LIMIT = 2880;
+
+/**
+ * Vertical reach of the fitted slope surfaces (`Arena.slopes`). A rect level's
+ * diagonals were extracted as a 3px staircase; the fitted segment is the same
+ * surface without the risers, so the unit rides the segment and the rects it was
+ * fitted from are ignored while it does.
+ */
+/**
+ * Authentic side-wall probes (`Movement.as:198-201`, doc 01 §4d): four discrete
+ * points per side, `±17` native px horizontally, at these heights above the feet.
+ *
+ * The band matters as much as the points. Nothing below -20 is probed, so the
+ * lower legs never register as blocked and a unit can stand flush against a low
+ * ledge. Nothing above -45 is probed either — roughly waist height on the 128px
+ * figure — so a unit walks *under* an overhang instead of jamming its head on
+ * it. Shared by both collision paths so the two cannot drift apart.
+ */
+const SIDE_PROBE_DX = 17;
+const SIDE_PROBE_H = [-20, -25, -35, -45];
+
+/** How far below the feet a slope surface is still picked up and snapped to. */
+const SLOPE_SNAP = 12;
+/** A rect within this of the slope surface is one of its own risers, not a wall. */
+const SLOPE_ABSORB = 6;
 
 /**
  * Combat hurt box in native px about the feet, standing and crouching, exactly
@@ -248,6 +287,9 @@ export class Unit {
   isJug = false;
   /** CTF: the enemy flag this unit is currently carrying (see Objectives). */
   hasFlag: any = null;
+  /** Domination: standing on a point this unit's team doesn't own. Maintained
+   *  by `Objectives.tickDom`, read by the kill-bonus dispatch. */
+  capturing = false;
   /** Team to restore when the Juggernaut buff is dropped. */
   private jugTeam = 0;
 
@@ -286,6 +328,13 @@ export class Unit {
    *  gravity math and by `doJump` (modJump). Not sticky — leaving the zone
    *  reverts to defaults, matching the SWF `resetMods()` model (doc 01 §7). */
   surfaceMods: SurfaceMods | null = null;
+  /** `Bullet.as:468`: foliage hits this unit has landed, for "I hate nature!".
+   *  Per-unit and per-match, exactly as the original counts it. */
+  treeShoot = 0;
+  /** `Unit.as`'s `fc` — a free-running per-unit frame counter. The SWF gates the
+   *  terrain kick-up on `fc % 3`, so two units on the same mud are out of phase
+   *  with each other rather than splashing in lockstep. */
+  private fc = 0;
 
   /**
    * Passive equipment effect map (`equips[type] = value`), mirroring the SWF
@@ -355,6 +404,24 @@ export class Unit {
    * baked into the body frame). */
   private headSprite: Sprite | null = null;
   private headCostume = -1;
+  /**
+   * The back-attachment slot (`MC.body.ability`, DefineSprite_249): the equipped
+   * ability's kit normally, the CTF flag while carrying one. One layer, because
+   * that is how the original models it — `NodeCtfFlag.capture` overrides the
+   * same clip with `gotoAndStop("flag" + team)` and `reset()` puts the kit back,
+   * so a unit can never show both.
+   */
+  private abilitySprite: Sprite | null = null;
+  /** Last back-slot frame name pushed, to skip redundant texture swaps. */
+  private abilityFrame = "";
+
+  /** Whether this unit's rig actually has the back slot, i.e. it can wear its
+   *  ability kit and the CTF flag. Only the animated Raze 2 skin rig does; the
+   *  Raze 1 layered/baked bodies have no back attachment, so CTF falls back to
+   *  a marker drawn over the carrier (see Objectives.draw). */
+  get wearsBackSlot(): boolean {
+    return !!this.abilitySprite;
+  }
   /** Whether this unit renders with the separate rotatable head layer. */
   private useHead = false;
   /** Layered per-costume rig (SWF parts): container + one sprite per depth. */
@@ -484,6 +551,11 @@ export class Unit {
     // player next to it.
     const pool = SkinAnim.manifest.skins;
     this.skinId = extra.skin ?? pool[(c.preset - 1) % pool.length] ?? "";
+    // Pull this skin's arm sheets now rather than on first fire. `ArmAnim`
+    // back-stops a missing sheet with the default skin's arms, so without this
+    // a non-default unit renders its own body wearing the Raze soldier's arms
+    // until the sheet lands — and again on each switch into a new weapon pose.
+    ArmAnim.preloadSkin(this.skinId);
     if (SD.matchSettings.campaign) {
       c.head = c.ohead;
       c.body = c.obody;
@@ -621,6 +693,9 @@ export class Unit {
         this.bodySprite = body;
         this.charC.addChildAt(body, 0);
         this.addFrontArm(1);
+        // Behind the torso, in front of the back arm — the slot is child 0 of
+        // the body clip in the SWF, i.e. drawn under the body art.
+        this.addAbilitySlot();
         this.addBackArm();
         this.syncArm();
       }
@@ -709,6 +784,51 @@ export class Unit {
    * and no hands, so it needs no state of its own — it is inserted at the back
    * of the stack and then rides `arm1`'s playhead and transform.
    */
+  /**
+   * Build the back-attachment layer. Every frame of the clip was baked on the
+   * same canvas, so one shared anchor (the clip registration point) serves them
+   * all and the sprite just goes wherever the per-frame attach point says.
+   */
+  private addAbilitySlot(): void {
+    if (this.abilitySprite || !AbilityArt.loaded) return;
+    const a = new Sprite();
+    const [ax, ay] = AbilityArt.anchor();
+    a.anchor.set(ax, ay);
+    a.visible = false;
+    this.abilitySprite = a;
+    this.charC.addChildAt(a, 0);
+  }
+
+  /**
+   * Put the right thing on the unit's back and weld it to the torso.
+   *
+   * `NodeCtfFlag.capture` sets this clip to `flag<team>` — the **flag's** team,
+   * not the carrier's, so a blue player running the orange flag shows orange —
+   * and `reset()` restores `ability.sprite`. The port's ability ids are the
+   * clip's frame labels verbatim, so the id is the frame name.
+   */
+  private updateAbilitySlot(state: string): void {
+    const spr = this.abilitySprite;
+    if (!spr) return;
+    const flag = this.hasFlag;
+    const want = flag ? `flag${flag.team}` : (this.ability?.id ?? "none");
+    if (want !== this.abilityFrame) {
+      this.abilityFrame = want;
+      const tex = AbilityArt.getTexture(want);
+      if (tex) spr.texture = tex;
+      spr.visible = !!tex;
+    }
+    if (!spr.visible) return;
+    const p = SkinAnim.ability(state, this.animFrame);
+    const bs = this.bodyScale();
+    spr.x = p.x * bs * this.facing;
+    spr.y = p.y * bs;
+    spr.scale.set(bs * this.facing, bs);
+    // The torso leans up to ~15 degrees through the run/tuck cycles and the pack
+    // rides it. Mirror the angle when facing left, like the rest of the rig.
+    spr.rotation = ((p.rot * Math.PI) / 180) * this.facing;
+  }
+
   private addBackArm(): void {
     const a = new Sprite();
     const anc = ArmAnim.anchor();
@@ -928,10 +1048,18 @@ export class Unit {
       const tex = PartArt.getTexture(p.cid, costume);
       if (tex) sp.texture = tex;
       sp.visible = !!tex;
-      // SWF affine m = [scaleX, rotateSkew0, rotateSkew1, scaleY, txPx, tyPx] maps
-      // to a Pixi Matrix(a=sx, b=r1, c=r0, d=sy, tx, ty).
+      // SWF affine m = [scaleX, rotateSkew0, rotateSkew1, scaleY, txPx, tyPx].
+      // A SWF MATRIX is  | scaleX  rotateSkew1  tx |  and Pixi/SVG's
+      //                  | rotateSkew0  scaleY  ty |
+      // Matrix(a,b,c,d,tx,ty) is | a c tx |, so the order carries over 1:1.
+      //                          | b d ty |
+      // This used to pass (m[0], m[2], m[1], m[3]), transposing the 2x2 and so
+      // mirroring every limb's rotation — which is what broke this rig. Checked
+      // against the flat baked body by tools/part-rig/check_matrix_order.py:
+      // 0.95 silhouette IoU this way versus 0.80 transposed, and the gap widens
+      // to 0.38 on the run cycle where the limbs actually swing.
       const m = p.m;
-      sp.setFromMatrix(new Matrix(m[0], m[2], m[1], m[3], m[4], m[5]));
+      sp.setFromMatrix(new Matrix(m[0], m[1], m[2], m[3], m[4], m[5]));
     }
     for (const [d, sp] of this.partSprites) if (!used.has(d)) sp.visible = false;
   }
@@ -988,6 +1116,7 @@ export class Unit {
       this.bodySprite.anchor.set(a.x, a.y);
       this.bodySprite.y = 0;
       this.bodySprite.scale.set(bs * this.facing, bs);
+      this.updateAbilitySlot(render);
     } else if (this.bodySprite) {
       let tex = this.bodyFrame(state, this.animFrame);
       // Until the tuck art is extracted, fall back to the jump pose so the
@@ -1031,14 +1160,14 @@ export class Unit {
       const extra = this.rotReload * DEG * this.facing;
       const rad = this.aimRotation * DEG + extra;
       arm.scale.set(as * this.facing, as);
-      // During a double-jump flip, hold the arm fixed relative to the body so it
-      // tumbles cleanly with charC instead of re-aiming through the spin.
-      // Otherwise subtract the body lean (charC is rotated by `tilt`) so the arm
-      // still points exactly at the world aim angle whatever the ground slope.
-      if (!this.flipActive) {
-        const world = this.facing > 0 ? rad : rad + Math.PI;
-        arm.rotation = world - this.tilt;
-      }
+      // The arm goes on tracking the cursor in body space right through a flip —
+      // `rotArm` is recomputed every frame in `Unit.as:1098` whether spinning or
+      // not. The tumble is charC's rotation stacked on top, which is exactly
+      // what throws the shot off (see `fireRotation`). Only the ground lean is
+      // compensated for: charC carries `tilt` when not flipping, so subtracting
+      // it keeps the arm on the cursor whatever the slope underfoot.
+      const world = this.facing > 0 ? rad : rad + Math.PI;
+      arm.rotation = world - (this.flipActive ? 0 : this.tilt);
       // One shoulder, one angle, two arms: `arm1.x = arm2.x = arm1hold.x`
       // (UnitMC.as:103-109) and `MC.arm2.rotation = rotReload + rotArm`
       // (Unit.as:1129). The back arm's own bake is registered on that same
@@ -1145,6 +1274,12 @@ export class Unit {
     } else if (st?.ddamageTimer > 0) {
       const expiring = st.ddamageTimer < 60 && this.fxTick % 8 < 4;
       tint = expiring ? 0xffffff : 0xff8a72;
+    } else if (st?.rapidTimer > 0) {
+      // Status.as:477 glows a rapid-fire unit 0xffbf00 and blinks it out over
+      // the last 10 frames; the port blinks on the same near-expiry rule it
+      // uses for the other power-ups.
+      const expiring = st.rapidTimer < 60 && this.fxTick % 8 < 4;
+      tint = expiring ? 0xffffff : 0xffd23d;
     }
     this.bodySprite.tint = tint;
     // Every arm layer, or a status flash would recolour the limb but not the
@@ -1396,7 +1531,8 @@ export class Unit {
   // --- spawning / respawn -----------------------------------------------
 
   respawn(): void {
-    if (this.ragActor) this.ragActor.respawned = true;
+    // Let go of the corpse — it lives out its own four seconds and evaporates
+    // on `PhysVap`'s clock, not on the owner coming back.
     this.ragActor = null;
     this.ragDoll = null;
     this.canRespawn = false;
@@ -1459,7 +1595,14 @@ export class Unit {
       return;
     }
 
-    const nodes = this.game.arena.spawnNodes;
+    // `Unit.getSpawnNode()`: the team pool in Capture the Flag, the neutral
+    // pool in every other mode. The port used to pass the whole node list here,
+    // so CTF teams could spawn in the enemy base and free-for-all drew from the
+    // base spawns the original keeps out of the pool.
+    const nodes = this.game.arena.spawnsFor(
+      this.team,
+      SD.matchSettings?.type === "ctf",
+    );
     let node: any;
     if (!this.game.gameStarted && this.human && SD.matchSettings.level === "tut") {
       node = { x: this.game.arena.humanWP.x, y: this.game.arena.humanWP.y };
@@ -1485,12 +1628,21 @@ export class Unit {
    * invasion cues drop their aliens in above the arena floor on purpose — so
    * from here it just falls and plays on, respawning at a normal node if killed.
    */
-  spawnScripted(x: number, y: number): void {
+  spawnScripted(x?: number, y?: number): void {
     this.extra.noSpawn = false;
     if (this.status.dead) {
       this.respawn();
     } else {
       this.view.visible = true;
+    }
+    // `units[n].spawn()` with no arguments — the form most of the campaign uses
+    // — drops the bot at a normal spawn node instead of a scripted point.
+    if (x === undefined || y === undefined) {
+      this.setSpawn();
+      this.jumping = null;
+      this.moving.vel = 0;
+      this.game.addEffect(this.x, this.y, "spawn");
+      return;
     }
     this.x = x;
     this.y = y;
@@ -1500,11 +1652,22 @@ export class Unit {
     Sound.playSynthAt("whoosh", this.x, this.y, 0.55, SPAWN_RANGE);
   }
 
-  /** Spawn point maximising distance to the nearest live enemy. */
+  /**
+   * Spawn point maximising distance to the nearest live enemy.
+   *
+   * Note this is a port addition: `Unit.getSpawnNode()` just does `randEl` on
+   * every respawn after the first. It is kept because random respawns next to a
+   * camper feel awful, but it must search the *same* pool the original would
+   * have drawn from, or it hands back enemy-base nodes in CTF.
+   */
   findFurthestSpawnNode(): any {
     let best: any = null;
     let bestDist = -9999;
-    for (const node of this.game.arena.spawnNodes) {
+    const pool = this.game.arena.spawnsFor(
+      this.team,
+      SD.matchSettings?.type === "ctf",
+    );
+    for (const node of pool) {
       // Distance from THIS node to its nearest enemy — the metric the doc
       // comment promises. Comparing raw per-enemy distances across nodes (as
       // this used to) would let a node that merely happens to be far from
@@ -1580,6 +1743,9 @@ export class Unit {
       // The double jump always switches to the tucked-flip body pose.
       this.jumping.tuck = true;
       this.tucking = true;
+      // `Movement.as:179`: the kick-off puff under the feet, which is most of
+      // what sells the second jump as pushing off something.
+      this.game.addEffect(this.x, this.y, "smoke_med");
       // ...but the full 360° spin only fires on a strong upward double jump WITH
       // horizontal input, matching the SWF (doSpin: jumping.vel < -10 && L/R held).
       if (this.jumping.vel < -10 && this.keys & (K.LEFT | K.RIGHT)) {
@@ -1600,7 +1766,9 @@ export class Unit {
     this.jumping = { vel: -13 * power, grav: 0.8, fallMax: 20, dJump: true, tuck: true };
     this.tucking = true;
     Sound.playAt("R2_Jumppad", this.x, this.y, 1, SPAWN_RANGE);
-    this.game.addEffect(this.x, this.y - 20, "spawn");
+    // `Movement.as:157` — smoke, not the teleport flash. The port stood in with
+    // "spawn" while the BH atlas was unextracted.
+    this.game.addEffect(this.x, this.y - 20, "smoke_big");
   }
 
   /** Begin the signature double-jump front-flip, spun toward the held direction. */
@@ -1681,6 +1849,11 @@ export class Unit {
         if (best === null || wt < best) best = wt;
       }
     }
+    // A fitted slope replaces the staircase it was fitted to — same surface,
+    // no risers — but only there: a rect well clear of the segment is a real
+    // platform above or below the ramp and keeps its own height.
+    const sy = this.game.arena.slopeYAt(wx, feet, band);
+    if (sy !== null && (best === null || Math.abs(best - sy) <= SLOPE_ABSORB)) return sy;
     if (best === null && Math.abs(this.game.arena.floorY - feet) <= band) {
       best = this.game.arena.floorY;
     }
@@ -1689,6 +1862,27 @@ export class Unit {
 
   doCrouch(): void {
     if (!this.jumping) this.crouching = true;
+  }
+
+  /**
+   * Terrain thrown up by walking — `Unit.as` cases 20 (mud), 21 and 26 (sand and
+   * the shallows). Both are gated on `SD.graphPart`, on speed, and on `fc % 3`,
+   * so a sprint kicks up a trail and a shuffle does not.
+   *
+   * Mud wants real pace (`|xVel| > 5`); sand goes at a walk (`> 1`). Snow has no
+   * walking splash in the SWF at all — its `snow_splash` is the falling flake
+   * landing, which `Arena.onSplash` already drives.
+   */
+  private surfaceKickup(sm: SurfaceMods | null): void {
+    this.fc++;
+    if (!sm || this.jumping || !SD.graphPart) return;
+    const mud = sm.type === "mud";
+    const sand = sm.type === "sand" || sm.type === "waterDeep";
+    if (!mud && !sand) return;
+    if (this.fc % 3 !== 0) return;
+    const speed = Math.abs(this.moving?.vel ?? 0);
+    if (speed <= (mud ? 5 : 1)) return;
+    this.game.addEffect(this.x, this.y - 4, mud ? "mud_splash" : "sand_splash");
   }
 
   // --- movement + collision ---------------------------------------------
@@ -1710,6 +1904,14 @@ export class Unit {
     // reset next frame by re-sampling (non-sticky). null = plain ground.
     const sm = this.game.arena.wallMask?.surfaceTypeAt(this.x, this.y + 1) ?? null;
     this.surfaceMods = sm;
+    // `Unit.as:770-776`: two of the secrets are earned just by standing on the
+    // marker — the lol cat and the jolly heart. Human only; the bots wandering
+    // over them must not hand the player an achievement.
+    if (this.human && sm) {
+      if (sm.type === "secretCat") Achievements.addAch("cat");
+      else if (sm.type === "secretHeart") Achievements.addAch("health");
+    }
+    this.surfaceKickup(sm);
     const modSpeed = sm?.modSpeed ?? 1;
     const modMax = sm?.modMax ?? 1;
     const modBrake = sm?.modBrake ?? 1;
@@ -1786,10 +1988,17 @@ export class Unit {
     // a ledge, so the unit walks off it and falls normally. Only while grounded
     // (never mid-jump) so it can't cancel a jump or yank a falling unit down.
     const slopeMask = this.game.arena.wallMask;
-    if (slopeMask && !this.jumping && this.x !== preX) {
+    if (!this.jumping && this.x !== preX) {
       const up = STEP_UP_MAX * this.scale;
       const down = Math.abs(this.x - preX) + 4 * this.scale;
-      const surf = slopeMask.surfaceUnder(this.x, this.y, Math.max(up, down));
+      const reach = Math.max(up, down);
+      // Pixel-mask maps (Raze 2) read the silhouette directly. Rect maps
+      // (Raze 1) follow the diagonals fitted from their staircase cover — same
+      // glide, from a segment instead of a bitmap. Rect maps with no segment
+      // under the feet fall through to `tryStepUp` in the x-pass as before.
+      const surf = slopeMask
+        ? slopeMask.surfaceUnder(this.x, this.y, reach)
+        : this.game.arena.slopeYAt(this.x, this.y, reach);
       if (surf !== null) {
         const dy = surf - this.y; // >0: surface below feet (descending); <0: above (ascending)
         if (dy < 0 ? -dy <= up : dy <= down) this.y = surf;
@@ -1810,11 +2019,20 @@ export class Unit {
       this.resolveAxis("y");
     }
 
-    // Jump pads (authentic, doc 12 §2.3): a human must actively press Jump while
-    // standing on a pad — that path lives in `doJump`. Bots have no NodeAiAction
-    // cue graph wired for the Raze 2 maps, so they keep a contact-launch fallback
-    // here (grounded on a pad → launch) so they can still clear pad gaps.
-    if (this.ai && !this.jumping && this.game.gameStarted) {
+    // Jump pads: in the original NOTHING launches on contact. `modJump` /
+    // `modSideJump` / `modMegaJump` are surface mods set while you stand on a
+    // pad, and they are only ever spent inside `Movement.doJump` — so a unit
+    // has to actually jump. That path lives in `doJump` here too.
+    //
+    // Bots used to get a contact-launch fallback because the port had never
+    // extracted the `NodeAiAction` graph and they would otherwise never use a
+    // pad. Now that every Raze 2 map carries its authored jump zones, they use
+    // pads the way the original intends, and the fallback is gone — it was
+    // firing on bots that merely *fell* onto a pad, which bounced them between
+    // the pad and the ceiling indefinitely (measured: 18.5 s airborne on
+    // r2_city). The Raze 1 maps still have no authored zones, so they keep it.
+    if (this.ai && !this.jumping && this.game.gameStarted &&
+        !this.game.arena.authoredWaypoints) {
       const pad = this.game.arena.jumpPadAt?.(this.x, this.y);
       if (pad) this.launchPad(pad.power, pad.dirX);
     }
@@ -1930,6 +2148,11 @@ export class Unit {
       }
       return this.y >= this.game.arena.floorY - 0.5;
     }
+    // Standing on a fitted slope counts as grounded in its own right: the
+    // risers underneath it are skipped by the x-pass, so they cannot be relied
+    // on to answer this.
+    const sy = this.game.arena.slopeYAt(this.x, this.y, SLOPE_SNAP);
+    if (sy !== null && this.y >= sy - 2 && this.y <= sy + 8) return true;
     for (const w of this.game.arena.walls) {
       if (w.rotation) continue;
       const wl = w.x - w.width / 2;
@@ -1953,8 +2176,18 @@ export class Unit {
       this.y = this.game.arena.floorY;
       this.jumping = null;
     }
+
+    // Ride the fitted diagonal. The rects it was meshed from still sit under it
+    // as a safety net for fast falls, so this only has to catch the walking
+    // case: feet at or below the surface, and not on the way up through it.
+    const surf = this.game.arena.slopeYAt(this.x, this.y, SLOPE_SNAP);
+    if (axis === "y" && surf !== null && this.y > surf && !(this.jumping && this.jumping.vel < 0)) {
+      this.y = surf;
+      this.jumping = null;
+    }
+
     for (const w of this.game.arena.walls) {
-      if (w.rotation) continue; // slopes not handled in the kinematic pass
+      if (w.rotation) continue; // rotated rects are unused; slopes are segments
       const b = this.bounds();
       const wl = w.x - w.width / 2;
       const wr = w.x + w.width / 2;
@@ -1963,17 +2196,56 @@ export class Unit {
       if (b.r <= wl || b.l >= wr || b.b <= wt || b.t >= wb) continue;
 
       if (axis === "x") {
+        // A rect sitting at (or just under) the slope surface the unit is on is
+        // one of that slope's own risers. Blocking on it is exactly the judder
+        // the fitted segments exist to remove, so it is skipped — the y-pass
+        // above has already placed the feet on the surface that covers it.
+        if (surf !== null && wt >= surf - SLOPE_ABSORB) continue;
+
+        // Authentic side probes rather than the full movement box. `bounds()` is
+        // the whole 128px figure, so testing it against walls blocked the walk
+        // on anything overhanging between waist and head height — which is what
+        // jammed units against platform undersides on the rect maps (a bot wedged
+        // repeatedly at the same spot under one on `space`). The mask maps have
+        // always probed this way; this brings the rect maps in line.
+        const sx = SIDE_PROBE_DX * this.scale;
+        let hitR = false;
+        let hitL = false;
+        for (const h of SIDE_PROBE_H) {
+          const py = this.y + h * this.scale;
+          if (py <= wt || py >= wb) continue;
+          if (this.x + sx > wl && this.x + sx < wr) hitR = true;
+          if (this.x - sx > wl && this.x - sx < wr) hitL = true;
+        }
+        if (!hitR && !hitL) continue;
+
         // Before treating this as a solid wall, see if it is really just a small
-        // ledge the unit can auto-step onto (stair-stepped slopes are meshed as
-        // many short rects). If so, the feet are lifted onto the ledge top and
-        // the horizontal move is allowed to proceed instead of jamming.
+        // ledge the unit can auto-step onto (levels the fitter found no segment
+        // for still rely on this). If so, the feet are lifted onto the ledge top
+        // and the horizontal move is allowed to proceed instead of jamming.
         if (this.tryStepUp(w)) continue;
 
-        // Push out horizontally by the smaller overlap.
-        const pushLeft = b.r - wl;
-        const pushRight = wr - b.l;
-        if (pushLeft < pushRight) this.x -= pushLeft;
-        else this.x += pushRight;
+        // Set the probe line clear of the face it went through. Directional,
+        // not minimum-translation: a unit driven deep into a thick boundary wall
+        // used to be ejected out the far side, i.e. straight out of the level.
+        if (hitR && !hitL) this.x = wl - sx;
+        else if (hitL && !hitR) this.x = wr + sx;
+        else {
+          // Probes inside the wall on both sides, so neither face is obviously
+          // the one we came through. Minimum translation alone is wrong here:
+          // against a thick boundary wall the shorter exit is the *outward* one,
+          // which is precisely how units ended up outside the level. Prefer the
+          // smaller correction, but never one that lands outside the arena.
+          const toLeft = wl - sx;
+          const toRight = wr + sx;
+          const W = this.game.arena.worldW;
+          const inside = (v: number): boolean => v >= 0 && v <= W;
+          const leftOk = inside(toLeft);
+          const rightOk = inside(toRight);
+          if (leftOk && (!rightOk || this.x - toLeft <= toRight - this.x)) this.x = toLeft;
+          else if (rightOk) this.x = toRight;
+          else this.x = Math.min(W, Math.max(0, toLeft));
+        }
         this.moving.vel = 0;
         // Braced against a wall, so the recoil shove has nowhere to go.
         this.knockVel = 0;
@@ -2009,15 +2281,10 @@ export class Unit {
       const vx = this.moving.vel + this.knockVel;
       if (vx === 0) return;
       const dir = vx > 0 ? 1 : -1;
-      // Authentic side-wall collision: 4 discrete point probes per side at
-      // dx = ±17 px, heights -20/-25/-35/-45 native px above the feet origin
-      // (doc 01 §4d, Movement.as:198-201). Nothing is probed between the origin
-      // and -20, so the lower legs/feet never register as blocked by a side wall
-      // — that gap is what lets a unit stand flush against low ledges.
-      const sx = 17 * this.scale;
-      const probeH = [-20, -25, -35, -45];
+      // Authentic side-wall collision — see SIDE_PROBE_DX / SIDE_PROBE_H.
+      const sx = SIDE_PROBE_DX * this.scale;
       const hitSide = (off: number): boolean => {
-        for (const h of probeH) {
+        for (const h of SIDE_PROBE_H) {
           if (mask.solidAt(this.x + off, this.y + h * this.scale)) return true;
         }
         return false;
@@ -2161,6 +2428,25 @@ export class Unit {
   }
 
   /**
+   * The direction a round actually leaves in, in world degrees.
+   *
+   * `aimRotation` is the arm's angle *in body space* — the SWF's `rotArm`, which
+   * tracks the cursor every frame. The body itself is spun by the double-jump
+   * flip, so the barrel points somewhere else entirely mid-tumble:
+   *
+   *     aimRoation = UT.fixRotation(rotArm + 90) + spinMC.rotation   Unit.as:1103
+   *
+   * That is the whole reason a flip throws your aim off in the original — the
+   * spin is added straight into the firing angle. Everything world-space (shots,
+   * muzzle flash, casings, smoke) uses this; the arm sprite, which is drawn
+   * inside the spinning container and so picks the flip up for free, uses
+   * `aimRotation`.
+   */
+  get fireRotation(): number {
+    return this.aimRotation + (this.flipActive ? (this.flipAngle * this.flipDir) / DEG : 0);
+  }
+
+  /**
    * The weapon-arm shoulder pivot, in arena space.
    *
    * This is the exact point the arm sprite is rotated about in updateSprites():
@@ -2172,10 +2458,19 @@ export class Unit {
     // the arm isn't actually drawn at.
     const sh = this.shoulder();
     const bs = this.bodyScale();
-    return {
-      x: this.x + sh.x * bs * this.facing,
-      y: this.y + sh.y * bs,
-    };
+    let ox = sh.x * bs * this.facing;
+    let oy = sh.y * bs;
+    // Mid-flip the figure orbits charC's pivot, so the shoulder travels with it
+    // — otherwise the shot still leaves from a chest that is no longer there.
+    if (this.flipActive) {
+      const py = TORSO_PIVOT_Y * bs;
+      const a = this.flipAngle * this.flipDir;
+      const cos = Math.cos(a);
+      const sin = Math.sin(a);
+      const ry = oy - py;
+      [ox, oy] = [ox * cos - ry * sin, py + ox * sin + ry * cos];
+    }
+    return { x: this.x + ox, y: this.y + oy };
   }
 
   /**
@@ -2194,7 +2489,7 @@ export class Unit {
    */
   getMuzzle(angleDeg?: number): { x: number; y: number } {
     const s = this.getShoulder();
-    const ang = angleDeg ?? this.gun?.lookAngle ?? this.aimRotation;
+    const ang = angleDeg ?? this.gun?.lookAngle ?? this.fireRotation;
     const len = (this.gun?.curGun?.muzzleLen ?? 18) * ARM_SCALE;
     // Perpendicular drop for guns whose muzzle sits off the shoulder line (the
     // rocket tube, chaingun barrels, etc). "Below the barrel" in the art must
@@ -2211,7 +2506,10 @@ export class Unit {
   }
 
   /** Called by Status when HP hits 0. Spawns the ragdoll + dropped gun. */
-  killGuy(info: { attacker?: any; x: number; y: number; headShot?: boolean; region?: string }): void {
+  killGuy(info: {
+    attacker?: any; x: number; y: number; headShot?: boolean; region?: string;
+    cause?: KillCause;
+  }): void {
     this.status.dead = true;
     this.view.visible = false;
 
@@ -2245,8 +2543,28 @@ export class Unit {
     this.score.addDeath();
     const killer = info.attacker;
     const hud = this.game.hud;
+    // Everything the bonus dispatch needs that only the kill site knows: the
+    // spree this death ended, the crown, the flag (`Unit.as:273-320`).
+    const cause: KillCause = { ...info.cause };
+    if (this.score.killStreak >= SPREE_ENDER_AT) cause.spreeEnd = this.score.killStreak;
+    if (this.isJug) cause.jugKill = true;
+    if (this.hasFlag) cause.hasFlag = true;
+    if (info.headShot && !cause.headMult && !cause.assassin) cause.headMult = true;
+    if (info.region === "crotch") cause.crotchMult = true;
+    if (info.region === "butt") cause.buttMult = true;
+
+    // A team kill is not a kill: the original skips `addKill` entirely, tallies
+    // a betrayal against the victim's own score, and pays nothing.
+    if (killer && killer !== this && cause.teamkill) {
+      this.score.addBetrayal();
+      hud?.addMessage?.(`${killer._name} betrayed ${this._name}`, 0xff6a4d);
+      return;
+    }
+
     if (killer && killer !== this) {
-      killer.score.addKill(killer.gun.curGun.id, !!info.headShot);
+      const callouts = killer.score.addKill(killer.gun.curGun.id, !!info.headShot);
+      killer.score.addRegion(info.region);
+      killer.score.addKilledRace(SkinArt.info(this.skinId)?.race);
       // A kill tops up the killer's ability energy (a port addition — the SWF
       // charged energy purely on a timer).
       killer.status?.addEnergy?.(20);
@@ -2279,16 +2597,17 @@ export class Unit {
       }
       if (info.headShot) hud?.announce?.("HEADSHOT!", 0xffcc33);
 
-      // Raze 2 kill-bonus economy: award credits (base + bonuses) and, for the
-      // human's own kills, float the itemised bonus popup above the body.
-      const bonuses = computeKillBonuses(killer, this, info);
-      const pts = killPoints(killer, bonuses);
+      // Raze 2 kill-bonus economy: award credits (base + the first three
+      // bonuses) and, for the human's own kills, float the itemised popup.
+      const award = computeKillBonuses(killer, this, cause);
+      tallyBonuses(killer, award.all);
       if (killer.human) {
-        SD.addCredits(pts);
+        SD.addCredits(award.points);
         // "Stylish" / "Kill Enthusiast": track distinct kill-bonuses earned.
-        if (bonuses.length) {
+        // Every award counts here, not just the three that were paid.
+        if (award.all.length) {
           let fresh = false;
-          for (const b of bonuses) {
+          for (const b of award.all) {
             if (!SD.bonusesUnlocked.includes(b.id)) {
               SD.bonusesUnlocked.push(b.id);
               fresh = true;
@@ -2299,20 +2618,31 @@ export class Unit {
             if (SD.bonusesUnlocked.length >= 15) Achievements.addAch("bonus1");
             if (SD.bonusesUnlocked.length >= 30) Achievements.addAch("bonus2");
           }
-          this.game.addBonusPopup?.(
-            this.x,
-            this.y - 96 * this.bodyScale(),
-            bonuses.map((b) => b.name),
-            pts,
-          );
         }
+        this.game.addBonusPopup?.(
+          this.x,
+          this.y - 96 * this.bodyScale(),
+          award.paid.map((b) => b.name),
+          award.points,
+        );
       }
 
-      // Streak ladder lives in the HUD so the tiers and their colours are
-      // defined next to the announcement styling that renders them.
-      hud?.announceStreak?.(killer._name, killer.score.killStreak);
-      // This death ends the victim's own run, so their ladder re-arms.
-      hud?.resetStreak?.(this._name);
+      // Multikill and spree callouts, both from `Score.addKill`. The window
+      // callout comes first — a Double Kill that also hits 5 announces both.
+      // `Hud.setDisplay` pays the callout's credits through `creditMod`, so
+      // these are income as well as flavour.
+      const payout = (c: { credits: number } | null) => {
+        if (!c || !killer.human) return;
+        SD.addCredits(Math.ceil(c.credits * creditMod()));
+      };
+      if (callouts.multi) {
+        hud?.announceKill?.(killer, callouts.multi.label, !!killer.human);
+        payout(callouts.multi);
+      }
+      if (callouts.spree) {
+        hud?.announceSpree?.(killer, callouts.spree.label, killer.score.killStreak, !!killer.human);
+        payout(callouts.spree);
+      }
       if (typeof killer.say === "function" && Math.random() < 0.4) {
         killer.say(pick(KILL_LINES));
       }
@@ -2342,6 +2672,47 @@ export class Unit {
 
   EnterFrame(): void {
     this.moveUnit();
+  }
+
+  /**
+   * `Unit.as:577-584`: a unit outside the arena box dies to the environment —
+   * except in the tutorial, where falling out fails the mission instead. Matches
+   * the original for any unit, not just the player: the tutorial map's drop is
+   * meant to be a fail condition.
+   *
+   * Driven from `GameScreen`'s unit loop rather than from `EnterFrame` here,
+   * because every subclass (`Player`, `AI`, `NetPlayer`) overrides `EnterFrame`
+   * and none of them chains to `super` — so anything put in the base version
+   * runs for nobody.
+   */
+  containInArena(): void {
+    if (this.status.dead) return;
+    // Scripted reinforcements are parked at (-4000,-4000) by `setSpawn` until
+    // their cue fires, which is outside the box by design. They are not in the
+    // match yet, so the boundary rule does not apply to them — in the SWF this
+    // check lives inside `EnterFrame`, which a parked unit never reaches.
+    // Without this the whole campaign breaks: the tutorial fails on frame 1
+    // (any unit out of bounds fails the mission), and every other mission kills
+    // its reinforcements where they stand, before they are ever called in.
+    if (this.extra.noSpawn) return;
+    // The box comes from the arena, not from the SWF's literal 0..2880: that
+    // constant describes where Raze 2's maps sit, and the ported Raze 1 levels
+    // sit around the Flash stage origin instead, with real geometry at negative
+    // coordinates — `space`'s top platform surfaces at y = -16 and two of its
+    // spawn nodes ground onto it. On a Raze 2 map `killBounds` *is* 0..2880, so
+    // `Unit.as:577` is reproduced exactly there.
+    const b = this.game.arena?.killBounds;
+    const x0 = b ? b.x0 : 0, y0 = b ? b.y0 : 0;
+    const x1 = b ? b.x1 : ARENA_LIMIT, y1 = b ? b.y1 : ARENA_LIMIT;
+    if (this.x >= x0 && this.y >= y0 && this.x <= x1 && this.y <= y1) return;
+    if (this.game.tutorial) {
+      this.game.endGame(false);
+      return;
+    }
+    // `bypass` is the SWF's `param5` (`Unit.as:581`): falling out of the world
+    // kills through spawn invulnerability and the invincibility power-up alike,
+    // otherwise a protected unit would sit outside the level indefinitely.
+    this.status.doDamage(9999, { x: this.x, y: this.y, bypass: true });
   }
 
   // --- online multiplayer sync ------------------------------------------

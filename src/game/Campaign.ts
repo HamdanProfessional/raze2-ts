@@ -19,6 +19,7 @@
 
 import CAMPAIGN_DATA from "../assets/raze2/campaign.json";
 import { DEFAULT_LIVES } from "./Match";
+import { resolveEquipIndices } from "./Equipment";
 
 /** Raze 2 map geometries we extracted (see raze2maps.json). */
 const AVAILABLE = new Set([
@@ -66,8 +67,13 @@ export interface CampaignAi {
   preset?: number;
   /** Menu-cosmetic Raze 2 skin id the bot represents (live rig unchanged). */
   skin?: string;
-  /** Gun they spawn holding, if a real weapon id. */
+  /** Gun they spawn holding, if the script named a real weapon id. */
   gun?: string;
+  /** 7-slot tier array from the mission's weapon kit (`WEAPON_SETS`), resolved
+   *  to concrete guns by `resolveLoadout` at spawn. */
+  weapons?: number[];
+  /** Passive `equips[type] = value` map from the mission's equipment kit. */
+  equips?: Record<string, number>;
   /** F-key ability id, if any. */
   ability?: string;
   /** Named equipment loadout preset from the mission script. */
@@ -132,6 +138,58 @@ export interface CampaignEntry {
 /** `Hud.setCampMsg(who, text, time=4, speakerName="")` — the default hold. */
 const MSG_HOLD = 4;
 
+/**
+ * `Stats_Campaign.setWeapon()` — a mission's `weapon: "zombie"` names a *class
+ * kit*, not a gun. Each entry is the 7-slot tier array Raze 2 hands to
+ * `Guns.setGuns()`, which resolves `gunSet[slot] = getGun(slot, tier)`. So the
+ * zombies' `[0,4,0,0,0,0,0]` is the tier-4 SMG (`blood`), the aliens' kit is
+ * alien-race guns across the board, and the Raze soldiers' all-zeros is the
+ * stock seven.
+ *
+ * The port already resolves this shape via `resolveLoadout(extra.weapons)`;
+ * before this table the set name was passed through as if it were a gun id, so
+ * `WEAPONS["zombie"]` missed and every scripted bot in the campaign silently
+ * fell back to the default arsenal.
+ */
+const WEAPON_SETS: Record<string, number[]> = {
+  raze: [0, 0, 0, 0, 0, 0, 0],
+  raze2: [0, 0, 0, 0, 0, 0, 0],
+  raze3: [0, 0, 0, 0, 0, 0, 0],
+  johnny: [2, 1, 3, 0, 0, 0, 1],
+  medic: [0, 1, 0, 3, 0, 0, 3],
+  explosives: [0, 2, 4, 4, 3, 4, 1],
+  zombie: [0, 4, 0, 0, 0, 0, 0],
+  alien: [1, 3, 1, 1, 2, 2, 2],
+  commander: [1, 3, 2, 2, 3, 3, 4],
+  robot: [2, 0, 0, 0, 1, 1, 1],
+  robot2: [2, 0, 0, 0, 1, 1, 1],
+};
+
+/**
+ * `Stats_Campaign.setEquip()` — one item index per equipment class (0/1/2),
+ * fed to `Stats_Equipment.getEquipment(cls, index)`. These are what make the
+ * scripted cast feel different beyond their guns: zombies take the +100 health
+ * body and no gadgets, aliens spawn on a shield battery, the Commander gets the
+ * boss-tier pair, and the final Raze soldier carries the +400 health body.
+ *
+ * `robot2`'s third index is obfuscated in the decompile (only `6, 4` survive as
+ * stack pushes). It shares `robot`'s weapon kit exactly, so it takes `robot`'s
+ * cls-2 item; the two differ only in the tankier cls-0 body.
+ */
+const EQUIP_SETS: Record<string, number[]> = {
+  raze: [5, 2, 3],
+  raze2: [6, 2, 3],
+  raze3: [7, 2, 3],
+  johnny: [5, 2, 2],
+  medic: [2, 4, 1],
+  explosives: [3, 3, 4],
+  zombie: [6, 0, 0],
+  alien: [0, 5, 0],
+  commander: [1, 6, 4],
+  robot: [4, 4, 1],
+  robot2: [6, 4, 1],
+};
+
 /** Personality inferred from a bot's skin family (drives chatter lines). */
 function persFor(skin: string | undefined, alien: boolean): string {
   if (!skin) return alien ? "alien" : "gamer";
@@ -144,13 +202,18 @@ function persFor(skin: string | undefined, alien: boolean): string {
 
 function toAi(b: any, alien: boolean): CampaignAi {
   const level = Number(b.level) || 4;
+  // `b.weapon` is a kit name ("zombie", "alien", …) in every shipped mission;
+  // only pass it on as `gun` if a script ever names a literal weapon instead.
+  const kit = WEAPON_SETS[b.weapon];
   return {
     pers: persFor(b.skin, alien),
     diff: Math.max(0.5, Math.min(2.4, level / 4)),
     name: b.name,
     team: b.team,
     skin: b.skin,
-    gun: b.weapon,
+    gun: kit ? undefined : b.weapon,
+    weapons: kit,
+    equips: resolveEquipIndices(EQUIP_SETS[b.equip]),
     ability: b.ability && b.ability !== "none" ? b.ability : undefined,
     equip: b.equip,
     spawn: b.extra?.spawn,

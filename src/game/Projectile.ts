@@ -5,6 +5,7 @@ import { SD } from "../state/SD";
 import { canHarm } from "./Match";
 import { Achievements } from "./Achievements";
 import type { WeaponDef } from "./weapons";
+import type { KillCause } from "./KillBonus";
 import type { GameScreen } from "./GameScreen";
 import type { Unit } from "./Unit";
 
@@ -58,6 +59,11 @@ export class Projectile {
   private bounceCount = 0;
   /** A mine that has landed and armed (Bullet_Proj_Mine). */
   private settled = false;
+  /** This shell stuck to a corpse rather than a live unit — "Corpslosion!"
+   *  (`Bullet_Proj_Stick.as:73/95`). */
+  private stuckToCorpse = false;
+  /** Whose shot this originally was, once somebody reflected it back. */
+  reflectedFrom: Unit | null = null;
 
   constructor(
     private game: GameScreen,
@@ -130,6 +136,9 @@ export class Projectile {
     // Stuck grenade: ride the carrier until the fuse burns out.
     if (this.stuckTo) {
       const host = this.stuckTo;
+      // If the host dies while it is still cooking, the shell is now stuck to a
+      // corpse — "Corpslosion!" (`Bullet_Proj_Stick.as:90-95`).
+      if (host.status?.dead) this.stuckToCorpse = true;
       this.x = host.x + this.stuckDX;
       this.y = host.y + this.stuckDY;
       this.view.x = this.x;
@@ -352,6 +361,27 @@ export class Projectile {
     }
   }
 
+  /**
+   * What this munition was, for the kill-bonus dispatch. The two splash flags
+   * are not symmetric (`Bullet.as:560/755`): a *landed* hit from a weapon with
+   * a big blast radius is "Direct Hit!", while *splash* from a weapon with only
+   * incidental blast is "Splish Splash!". A shell that killed by neither
+   * (a plain projectile) carries neither flag.
+   */
+  private cause(directHit: boolean): KillCause {
+    const radius = this.def.splashRadius ?? 0;
+    return {
+      gun: this.def.id,
+      splashDirect: directHit && radius >= 80,
+      splashIndirect: !directHit && radius > 0 && radius < 80,
+      burrowMult: this.burrowing,
+      bounce: this.bounceCount,
+      corpseStick: this.stuckToCorpse,
+      reflect: this.reflectedFrom,
+      setFire: this.def.setFire,
+    };
+  }
+
   private explode(direct?: Unit): void {
     // Assault Bouncer: on ANY impact, split into radial ember sub-munitions
     // (extra.bounceShots, doc 04 §1.2) before resolving this hit.
@@ -373,6 +403,7 @@ export class Projectile {
             attacker: this.owner,
             x: Math.cos(rad),
             y: Math.sin(rad),
+            cause: this.cause(u === direct),
           });
           // "Return to Sender": the thrower is killed by their own shell after
           // it stuck to somebody else. Armor Plating (equips.critdef) is
@@ -394,6 +425,7 @@ export class Projectile {
         attacker: this.owner,
         x: Math.cos(rad),
         y: Math.sin(rad),
+        cause: this.cause(true),
       });
       if (this.def.setFire && !direct.equips?.critdef) {
         (direct.status as any).setFire?.(this.def.setFire, this.owner);
@@ -406,6 +438,9 @@ export class Projectile {
     // ignore the angle and stay radial).
     const backDeg = (Math.atan2(-this.vy, -this.vx) * 180) / Math.PI;
     this.game.addEffect(this.x, this.y, this.def.wallEff ?? "bullet", this.def.sparkColor, backDeg);
+    // Same soft-surface kick-up a hitscan round gets: a rocket into the mud
+    // throws mud, not just its own fireball.
+    this.game.addSurfaceSplash(this.x, this.y);
     this.game.removeFrameEffect(this);
   }
 

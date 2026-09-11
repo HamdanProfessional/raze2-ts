@@ -357,7 +357,7 @@ export class InfoScreen extends Screen {
 
   private close(): void {
     Sound.play("R2_ClickBack");
-    this.engine.setScreen(MenuScreen);
+    this.engine.setScreen(MenuScreen, undefined, "slideRight");
   }
 
   enterFrame(): void {
