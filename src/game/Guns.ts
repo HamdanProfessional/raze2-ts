@@ -9,6 +9,7 @@ import { Quality } from "../state/Quality";
 import { Projectile } from "./Projectile";
 import { canHarm } from "./Match";
 import { Achievements } from "./Achievements";
+import { RAZE2_SKINS } from "../assets/raze2";
 
 // Fire / reload sounds are data-driven off each weapon's def
 // (`fireSound`/`reloadSound`, wired for all 36 guns in weapons.ts).
@@ -48,6 +49,28 @@ type LiveGun = WeaponDef & { curClip: number; curAmmo: number };
 function bloodEffect(shielded: boolean, fallback: string): string {
   if (shielded) return "bloodShield";
   return SD.matchSettings?.specialMode === "lol cats" ? "bloodRainbow" : fallback;
+}
+
+/**
+ * Blood tint per race (`Stats_Skins.addSkin`'s 4th arg, which `Bullet.as:205`
+ * hands straight to `createEffect`). The original has five separate recoloured
+ * clips; the port draws one white spray and tints it, so what the skin selects
+ * here is a colour rather than an effect name. Values are the cxform adds baked
+ * on BH character 1740.
+ */
+const BLOOD_TINT: Record<string, number> = {
+  bloodHuman: 0xcc0000,
+  bloodAlien: 0x9900ff,
+  bloodRobot: 0x000000,
+  bloodZombie: 0x669900,
+};
+const SKIN_BLOOD: Record<string, string> = Object.fromEntries(
+  RAZE2_SKINS.map((s) => [s.id, s.blood]),
+);
+
+/** The victim's blood colour, or undefined (human red) for an unskinned unit. */
+function bloodTint(victim: { skinId?: string }): number | undefined {
+  return BLOOD_TINT[SKIN_BLOOD[victim.skinId ?? ""] ?? ""];
 }
 
 /**
@@ -399,9 +422,13 @@ export class Guns {
     // that a burst widens. So sustained fire still walks off-target, but
     // symmetrically — and the barrel keeps pointing where the bullet goes.
     // Stabilizer (equips.recoil, e.g. 0.6) tightens the cone.
+    // `dynRecoil` IS the half-cone in degrees — `Guns.as:283` seeds it straight
+    // from `curGun.recoil`, so a recoil of 9 means ±9°. weapons.ts stores recoil
+    // at 2x for the port's coordinate system, so halving it here lands back on
+    // the original angles: pistol ±5°, uzi ±9°, shotgun ±10°, sniper ±1°.
     const heat = 1 + Math.min(1, this.recoilAmount) * (RECOIL_SPREAD_MAX - 1);
     const spread =
-      this.curGun.recoil * 0.15 * (this.unit.equips?.recoil || 1) * heat;
+      this.curGun.recoil * 0.5 * (this.unit.equips?.recoil || 1) * heat;
     // The spin of a double-jump flip is part of where the barrel points, so
     // the round leaves along `fireRotation`, not the body-space arm angle.
     const aim = this.unit.fireRotation;
@@ -421,10 +448,14 @@ export class Guns {
         break;
       }
       case "spread": {
-        // A cone of hitscan pellets from one trigger pull.
+        // A cone of hitscan pellets from one trigger pull. Pellets use the same
+        // cone as any other shot — the original widens nothing for a shotgun,
+        // it just fires `extraShots + 1` rounds through `rand(-dynRecoil, ..)`.
+        // The 3x that used to sit here was cancelling out an under-scaled
+        // `spread`; with the cone correct it would make the shotgun 3x too wide.
         const pellets = this.curGun.multiShot ?? 5;
         for (let p = 0; p < pellets; p++) {
-          this.fireHitscan(aim + UT.rand(-spread * 3, spread * 3), false);
+          this.fireHitscan(aim + UT.rand(-spread, spread), false);
         }
         break;
       }
@@ -540,7 +571,7 @@ export class Guns {
     // `shielded` is sampled BEFORE the damage lands: `Bullet.as` draws the blood
     // at line 205 and calls `status.damage` at 242, so the shot that empties a
     // shield still sparks off it — and the shieldbreak fires alongside.
-    let unitHit: { x: number; y: number; shielded: boolean } | null = null;
+    let unitHit: { x: number; y: number; shielded: boolean; blood?: number } | null = null;
     /** First unit hit — the seed for an arc-chain (railgun2). */
     let primaryTarget: any = null;
     // Kills from this single shot — 3 in one railgun blast earns "Knockout".
@@ -574,7 +605,7 @@ export class Guns {
           const shielded = (u.status.shCur ?? 0) > 0;
           if (this.doHitUnit(u, px, py, cos, sin, hs, dmgMod)) killsThisShot++;
           hitAny = true;
-          unitHit = { x: px, y: py, shielded };
+          unitHit = { x: px, y: py, shielded, blood: bloodTint(u) };
           if (!primaryTarget) primaryTarget = u;
           if (!this.curGun.piercing) {
             blocked = true;
@@ -642,11 +673,14 @@ export class Guns {
       let eff = this.curGun.unitEff ?? "blood";
       const isBlood = eff === "blood" || eff === "bloodBig";
       if (isBlood) eff = bloodEffect(unitHit.shielded, eff);
+      // Plain blood carries the victim's race tint; the shield/rainbow variants
+      // are their own baked art and must not be recoloured.
+      const plainBlood = isBlood && eff !== "bloodShield" && eff !== "bloodRainbow";
       this.unit.game.addEffect(
         unitHit.x,
         unitHit.y,
         eff,
-        isBlood ? undefined : this.curGun.sparkColor,
+        plainBlood ? unitHit.blood : isBlood ? undefined : this.curGun.sparkColor,
       );
     }
     this.unit.game.addTracer(m.x, m.y, hitX, hitY, this.tracerOpts(beam, !!unitHit));
@@ -727,6 +761,14 @@ export class Guns {
       region = behind ? "butt" : "crotch";
       mult = (behind ? this.curGun.buttMult : this.curGun.crotchMult) ?? 1;
     }
+    // A `mults` entry of 0 means "this weapon has no locational crit", NOT "×0
+    // damage": every consumer in the original tests the multiplier for truth
+    // before using it — `Status.as:274/293/301` (`Boolean(param4.headMult) &&
+    // ...`), `Unit.as:302-314` (headshot counter + sound), `KillPoints.as:105-119`
+    // (the kill bonus) and `PhysWorld.as:146` (the ragdoll head impulse). 17 of
+    // the 42 guns ship [0,0,0], the Katana among them, so treating 0 as a real
+    // multiplier would make a sword hit to the head do no damage at all.
+    if (mult === 0) { mult = 1; region = "body"; }
     // Armor Plating (target.equips.critdef): immune to locational crits — the
     // multiplier is cancelled and the hit no longer counts as a headshot.
     const critImmune = !!target.equips?.critdef;
@@ -772,6 +814,7 @@ export class Guns {
       y: sin,
       headShot,
       region,
+      force: this.curGun.force,
       cause: {
         gun: this.curGun.id,
         assassin: headShot && fromBehind,

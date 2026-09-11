@@ -55,8 +55,10 @@ export class Projectile {
   private stuckDX = 0;
   private stuckDY = 0;
   private fuse = 0;
-  /** Wall bounces so far (Bullet_Proj_Bounce). */
+  /** Wall bounces so far — scored, never a limit (Bullet_Proj_Bounce). */
   private bounceCount = 0;
+  /** Distance actually covered, summed per collision step. */
+  private travelled = 0;
   /** A mine that has landed and armed (Bullet_Proj_Mine). */
   private settled = false;
   /** This shell stuck to a corpse rather than a live unit — "Corpslosion!"
@@ -76,7 +78,7 @@ export class Projectile {
     this.x = x;
     this.y = y;
     const rad = (angleDeg * Math.PI) / 180;
-    const speed = (def.speed ?? 3) * 4;
+    const speed = def.speed ?? 5;
     this.vx = Math.cos(rad) * speed;
     this.vy = Math.sin(rad) * speed;
     // Spiral Chamber (owner.equips.range): flat +value*10 to travel distance.
@@ -86,7 +88,7 @@ export class Projectile {
     // Body art follows how the round behaves, not which gun fired it: a lobbed
     // munition that sticks or bounces tumbles as a ball, a big-blast round under
     // thrust flies as a missile, and everything else is an energy bolt.
-    const lobbed = def.stick || def.bounce;
+    const lobbed = def.stick || def.bounces;
     this.kind =
       def.flame ? "flame" :
       lobbed ? "grenade" :
@@ -157,19 +159,43 @@ export class Projectile {
       return;
     }
 
+    // A bouncing shell is bounded by its fuse, not by a bounce count: it cooks
+    // off on schedule wherever it happens to be (`Bullet_Proj_Bounce.as:117`,
+    // `fc == params[3] * 30`). The original tallies `extra.bounce` purely to
+    // award the icegun's multi-bounce kill bonus (`KillPoints.as:165`) — nothing
+    // reads it as a limit, so capping it detonated grenades mid-flight in any
+    // room tight enough to rattle them.
+    if (this.def.bounces && this.life >= (this.def.bounceLife ?? 90)) {
+      this.explode();
+      return;
+    }
+
     // Homing rounds steer toward the nearest enemy before moving.
     if (this.def.homing) this.steerHoming();
 
     if (this.def.flame) {
-      // Flamethrower: the flame billows *upward* rather than falling
-      // (Bullet_Proj_Frames, params[2] = -2), and fans out as it rises.
-      this.vy -= 0.18;
+      // Flamethrower: params[2] is -2, so the same `params[2] * 0.1` that pulls
+      // every other round down pushes the flame *up* at 0.2/frame. The drag is
+      // the port's own, to fan the billow out as it rises.
+      this.vy += this.def.gravity ?? -0.2;
       this.vx *= 0.97;
     } else {
-      this.vy += (this.def.fallSpeed ?? 0) * 0.8; // gravity per fallSpeed
+      // Once per frame, ahead of the substep loop — not once per step. See
+      // projMotion() in weapons.ts.
+      this.vy += this.def.gravity ?? 0;
     }
-    this.x += this.vx;
-    this.y += this.vy;
+
+    // Advance in the original's small steps rather than one frame-sized jump.
+    // This is what keeps a 70px/frame rocket from tunnelling clean through a
+    // wall thinner than its own stride.
+    const steps = 2 * (this.def.substeps ?? 1);
+    for (let s = 0; s < steps; s++) {
+      this.x += this.vx;
+      this.y += this.vy;
+      this.travelled += Math.hypot(this.vx, this.vy);
+      if (this.stepCollide()) return;
+    }
+
     this.view.x = this.x;
     this.view.y = this.y;
     this.view.rotation = Math.atan2(this.vy, this.vx);
@@ -207,10 +233,17 @@ export class Projectile {
       }
     }
 
-    // Wall / floor collision.
-    const hitSurface = this.game.arena.pointInWall(this.x, this.y) || this.y >= this.game.arena.floorY;
-    if (hitSurface) {
-      if (this.def.mine) { this.settle(); return; }
+  }
+
+  /**
+   * Resolve one collision step. Returns true when the shell is finished for this
+   * frame — detonated, settled, stuck or bounced — and the caller must stop
+   * advancing it.
+   */
+  private stepCollide(): boolean {
+    const arena = this.game.arena;
+    if (arena.pointInWall(this.x, this.y) || this.y >= arena.floorY) {
+      if (this.def.mine) { this.settle(); return true; }
       if (this.def.burrow) {
         // Shredder saw blades keep travelling *through* the ground at 2× damage
         // instead of stopping (extra.burrow, doc 04 §1.2). Nudge upward so the
@@ -218,23 +251,22 @@ export class Projectile {
         if (!this.burrowing) { this.burrowing = true; this.dmgMult = 2; }
         this.vy -= 0.2;
         if (this.life % 3 === 0) this.game.addEffect(this.x, this.y, "bullet", this.glowC);
-        // fall through to the unit-hit scan below (no explode / no return).
-      } else if (this.def.bounce != null) {
+        // fall through to the unit-hit scan below (no explode / no stop).
+      } else if (this.def.bounces) {
         this.doBounce();
         this.bounceCount++;
-        if (this.bounceCount > this.def.bounce || this.life > (this.def.bounceLife ?? 90)) this.explode();
-        return;
+        return true;
       } else {
         this.explode();
-        return;
+        return true;
       }
     }
 
-    // Out of range: bouncers/mines expire in place, everything else detonates.
-    if (this.life * (this.def.speed ?? 3) * 4 > this.maxDist) {
-      this.explode();
-      return;
-    }
+    // Out of range. The original accumulates the distance actually travelled
+    // (`countDistX/Y`, Bullet_Proj_Basic.as:48-49) rather than extrapolating it
+    // from a frame count, which is the only thing that stays honest once a round
+    // has been slowed by a bounce or bent by homing.
+    if (this.travelled > this.maxDist) { this.explode(); return true; }
 
     // Direct unit hit.
     for (const u of this.game.units) {
@@ -246,9 +278,10 @@ export class Projectile {
         if (this.def.stick) this.stickTo(u);
         else if (this.def.mine) continue;
         else this.explode(u);
-        return;
+        return true;
       }
     }
+    return false;
   }
 
   /** Steer the velocity toward the nearest harmable enemy within seek radius. */
@@ -278,18 +311,27 @@ export class Projectile {
     this.vy = Math.sin(a) * speed;
   }
 
-  /** Reflect off the surface just hit, damping the velocity. */
+  /**
+   * Reflect off the surface just hit, damping the velocity.
+   *
+   * Restitution is asymmetric in the original (`Bullet_Proj_Bounce.as:73-112`):
+   * a floor or ceiling reverses yVel at 0.5 and scrubs 0.2 off xVel, while a
+   * side wall reverses xVel at 0.6 and scrubs 0.3 off yVel. Using one
+   * coefficient for both makes grenades skitter along the ground instead of
+   * settling.
+   */
   private doBounce(): void {
     const arena = this.game.arena;
     if (this.y >= arena.floorY) {
-      this.vy = -Math.abs(this.vy) * 0.6;
+      this.vy = -Math.abs(this.vy) * 0.5;
+      this.vx *= 0.8;
       this.y = arena.floorY - 1;
     } else {
       const vSurface = arena.pointInWall(this.x - this.vx, this.y); // vertical wall
       const hSurface = arena.pointInWall(this.x, this.y - this.vy); // horizontal ceiling/floor
-      if (vSurface && !hSurface) this.vx = -this.vx * 0.7;
-      else if (hSurface && !vSurface) this.vy = -this.vy * 0.7;
-      else { this.vx = -this.vx * 0.7; this.vy = -this.vy * 0.7; }
+      if (vSurface && !hSurface) { this.vx = -this.vx * 0.6; this.vy *= 0.7; }
+      else if (hSurface && !vSurface) { this.vy = -this.vy * 0.5; this.vx *= 0.8; }
+      else { this.vx = -this.vx * 0.6; this.vy = -this.vy * 0.5; }
     }
     // Step out of the surface so we don't re-collide next frame.
     this.x += this.vx;
@@ -348,8 +390,9 @@ export class Projectile {
       maxClip: 1, curAmmo: 0, maxAmmo: 0,
       maxRange: 260, recoil: 0, reDuck: 0, reJump: 0,
       damage: 100, // Raze 2 bouncer dmg 10 ×10
-      projectile: true, speed: 1.4, fallSpeed: 3,
-      bounce: 5, bounceLife: 30,
+      // bouncer params ["ember", 1, 5, 1]: 1 substep, 0.5 gravity, 1s fuse.
+      projectile: true, speed: 5, substeps: 1, gravity: 0.5,
+      bounces: true, bounceLife: 30,
       projColor: 0xff9933, projGlow: 0xff5522,
       setFire: this.def.setFire,
       wallEff: "bulletExplode", unitEff: "bulletExplode",
@@ -403,6 +446,7 @@ export class Projectile {
             attacker: this.owner,
             x: Math.cos(rad),
             y: Math.sin(rad),
+            force: this.def.force,
             cause: this.cause(u === direct),
           });
           // "Return to Sender": the thrower is killed by their own shell after
@@ -425,6 +469,7 @@ export class Projectile {
         attacker: this.owner,
         x: Math.cos(rad),
         y: Math.sin(rad),
+        force: this.def.force,
         cause: this.cause(true),
       });
       if (this.def.setFire && !direct.equips?.critdef) {

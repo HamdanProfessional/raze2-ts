@@ -77,16 +77,29 @@ export interface WeaponDef {
   infAmmo?: boolean;
   /** Fires a travelling projectile instead of hitscan. */
   projectile?: boolean;
+  /**
+   * Raze 2 `force`: how hard a killing blow throws the corpse (3..30). Distinct
+   * from `kick`, which is the recoil shove the *shooter* takes.
+   */
+  force?: number;
+  /** Distance covered by one collision step (Raze 2: always 5). */
   speed?: number;
-  fallSpeed?: number;
+  /** Raze 2 `params[1]`: substeps per frame. A frame advances 2x this many steps. */
+  substeps?: number;
+  /** Downward velocity added once per frame (Raze 2 `params[2] * 0.1`). */
+  gravity?: number;
 
   // --- projectile behaviours (Raze 2 Bullet_Proj_* classes) -------------
   /** Homing: seek turn rate in rad/frame (>0 enables homing). */
   homing?: number;
   /** Homing acquisition radius (px). */
   seekRadius?: number;
-  /** Bounces off walls up to this many times before detonating (>0 enables). */
-  bounce?: number;
+  /**
+   * Bounces off walls instead of detonating (`Bullet_Proj_Bounce`). The shell is
+   * bounded by its fuse, not a bounce count — the original tallies `extra.bounce`
+   * only to award the icegun's multi-bounce kill bonus (`KillPoints.as:165`).
+   */
+  bounces?: boolean;
   /** Frames a bouncer lives before auto-detonating. */
   bounceLife?: number;
   /** Sticks to the unit it hits, then detonates after a fuse. */
@@ -304,19 +317,29 @@ function tracerFromParams(w: Raze2Weapon): Partial<WeaponDef> {
   };
 }
 
-/** Motion params for a projectile weapon, by its Raze 2 bullet class. */
-function projMotion(w: Raze2Weapon): { speed: number; fallSpeed: number } {
-  switch (w.cls) {
-    case "Bullet_Proj_Follow": return { speed: 6, fallSpeed: 0 };   // homing (stubbed straight)
-    case "Bullet_Proj_Bounce": return { speed: 5, fallSpeed: 1 };
-    case "Bullet_Proj_Stick": return { speed: 6, fallSpeed: 0.7 };
-    case "Bullet_Proj_Mine": return { speed: 0.2, fallSpeed: 1.5 }; // drops
-    case "Bullet_Proj_Frames": return { speed: 4, fallSpeed: 0 };   // flame
-    default: { // Bullet_Proj_Basic — gravity from params[2] if present
-      const g = Array.isArray(w.params) && typeof w.params[2] === "number" ? (w.params[2] as number) : 0.5;
-      return { speed: 5, fallSpeed: g };
-    }
-  }
+/**
+ * Per-*step* motion for a projectile weapon, read off its Raze 2 bullet class.
+ *
+ * `Bullet.as:120` launches every round at speed 10 and each `Bullet_Proj_*`
+ * constructor halves it, so one step is 5px — the same for every gun. What
+ * differs per weapon is how many steps a frame is worth: EnterFrame runs
+ * `params[1]` substeps and advances the position *twice* inside each
+ * (`Bullet_Proj_Basic.as:39-46`). The doubling is deliberate rather than a
+ * decompiler artefact — the range accumulator next to it reads
+ * `countDistX += Math.abs(xVel) * 2`. So a round covers `2 * params[1] * 5`
+ * per frame: 70px for the rocket's params[1]=7, 30px for the grenade's 3.
+ *
+ * Gravity is applied once per frame *before* the substep loop, not per step:
+ * `yVel += params[2] * 0.1`. Reading it per-step (or feeding params[2] in raw)
+ * makes a rocket fall 8x too fast.
+ */
+function projMotion(w: Raze2Weapon): { speed: number; substeps: number; gravity: number } {
+  // A mine is dropped rather than fired: it ignores the shared launch speed and
+  // simply falls until it settles.
+  if (w.cls === "Bullet_Proj_Mine") return { speed: 0.2, substeps: 1, gravity: 1.2 };
+  // Everything else — including the flamethrower, whose params[2] is negative
+  // (["flame", 2, -2, 4]) because its "gravity" makes the flame rise.
+  return { speed: 5, substeps: paramNum(w, 1, 2), gravity: paramNum(w, 2, 0) * 0.1 };
 }
 
 /** Read a numeric entry from a bullet-class params array, or a default. */
@@ -342,8 +365,8 @@ function projBehavior(w: Raze2Weapon): Partial<WeaponDef> {
       return hasHomingParams(w)
         ? { homing: 0.13, homingTurn: paramNum(w, 4, 7), seekRadius: paramNum(w, 3, 180) }
         : {};
-    case "Bullet_Proj_Bounce": // params[3] = lifetime seconds
-      return { bounce: 4, bounceLife: Math.round(paramNum(w, 3, 3) * 30) };
+    case "Bullet_Proj_Bounce": // params[3] = fuse seconds
+      return { bounces: true, bounceLife: Math.round(paramNum(w, 3, 3) * 30) };
     case "Bullet_Proj_Stick": // params[3] = fuse seconds
       return { stick: true, stickFuse: Math.round(paramNum(w, 3, 3) * 30) };
     case "Bullet_Proj_Mine": // params[0] = lifetime seconds
@@ -438,6 +461,7 @@ function raze2ToDef(w: Raze2Weapon): WeaponDef {
     percAmmo: extra.useAmmo != null || undefined,
     multiShot: pellets > 1 ? pellets : undefined,
     maxRange: isMelee ? Math.max(70, range) : range,
+    force: w.force,
     recoil: Math.max(2, Math.round(w.recoil * 2)),
     reDuck: 2,
     reJump: 8,

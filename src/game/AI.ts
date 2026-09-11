@@ -124,8 +124,6 @@ export class AI extends Unit {
   /** Current aim inaccuracy offset, refreshed every reaction tick. */
   private aimOffsetX = 0;
   private aimOffsetY = 0;
-  /** Cooldown between opportunistic dodge-hops during combat. */
-  private dodgeTimer = 0;
   /** Guards against spamming the low-health chatter every frame. */
   private lowHealthWarned = false;
 
@@ -525,8 +523,8 @@ export class AI extends Unit {
       this.patrol();
     }
 
-    // Aim: non-campaign bots track the human player by default; campaign bots do
-    // genuine per-unit target aiming (see §4.1 of the doc / class comment).
+    // Aim: every bot aims at its own target. Tracking the human is an opt-in
+    // override for scripted escorts only (`extra.aimPlayer`) — see aimStep().
     this.aimStep();
 
     // Fire gate: needs a live target + LOS; diff==0 dummies never shoot. Firing
@@ -634,23 +632,46 @@ export class AI extends Unit {
     if (this.hasFlag && this.goal) {
       // Carrying the enemy flag: break contact and run home, shooting on the move.
       this.keys |= this.goal.x > this.x ? K.RIGHT : K.LEFT;
-      // (no "goal is above me" hop: the SWF only ever jumps from an action
-      // box or a deliberate dodge, never to climb toward a target.)
     } else if (dist > maxR) {
       this.keys |= g.x > this.x ? K.RIGHT : K.LEFT;
     } else if (dist < minR) {
       this.keys |= g.x > this.x ? K.LEFT : K.RIGHT;
     }
 
-    if (!this.jumping) {
-      if (g.y < this.y - 40 && Math.random() < 0.05 * this.diffMod) {
+    // Authored jump zones apply in combat too. `AI.as` never branches its jump
+    // logic on whether a target exists — the action-box scan at :598-618 runs on
+    // every frame that is not a committed stand pose. Skipping it here was what
+    // left the port's bots unable to gain height once a fight started, which is
+    // the gap the removed random hop below was really papering over.
+    this.jumpZones();
+  }
+
+  /**
+   * Jump where the level designer said to, and nowhere else.
+   *
+   * `AI.as:598-618` is the *only* source of a bot jump in the original: a scan
+   * of the action boxes on the node being walked to, where `j` starts a jump
+   * from the ground and `d` fires regardless (spending the double jump). There
+   * is no bullet-dodge and no "my target is above me, try hopping" rule; the
+   * bot's whole in-combat randomness budget goes on the duck/hold and ability
+   * rolls instead, which `updateStance`/`tryAbility` already port faithfully.
+   *
+   * Two reactive jumps used to live in `combatMove` — a 5%/frame hop toward a
+   * higher target and a 1%/frame dodge, both scaled by `diffMod` so a hard bot
+   * rolled up to 15% and 3% *per frame*. They were added as a stand-in for the
+   * `standNormal`/`standTarget`/`standFlag` duck system back when that had no
+   * port equivalent. It has one now, so they were double-dipping on evasion and
+   * bunny-hopping visibly; they are gone.
+   */
+  private jumpZones(): void {
+    for (const a of this.nextNode?.actions ?? []) {
+      if (!AI.inBoxAt(this.x, this.y, a)) continue;
+      if (a.action === "j") {
+        if (!this.jumping) this.doJump(true);
+      } else if (a.action === "d") {
         this.doJump(true);
-      } else if (this.dodgeTimer <= 0 && Math.random() < 0.01 * this.diffMod) {
-        this.doJump(true);
-        this.dodgeTimer = 40;
       }
     }
-    if (this.dodgeTimer > 0) this.dodgeTimer--;
   }
 
   /** Fire gate (AI.as:620-632): fire probability scales with the gun's base
@@ -736,14 +757,7 @@ export class AI extends Unit {
     // action boxes and bots otherwise could not climb at all. That guess is
     // what made them hop on the spot under a ledge forever — the thing that
     // actually looked broken. With the real zones in the map data it is gone.
-    for (const a of n.actions ?? []) {
-      if (!AI.inBoxAt(this.x, this.y, a)) continue;
-      if (a.action === "j") {
-        if (!this.jumping) this.doJump(true);
-      } else if (a.action === "d") {
-        this.doJump(true);
-      }
-    }
+    this.jumpZones();
 
     // Levels with no authored graph (the Raze 1 maps, whose `wayNodes` is a
     // mesh over spawn points) have no jump zones either, so there the guess is

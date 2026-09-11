@@ -126,7 +126,8 @@ const EKG_TEXT_W = 54;
 // --- weapon rack (doc 14 §1.3) --------------------------------------------
 // Seven `gun0..gun6` holders, one per armory slot and per number-row key.
 const RACK_SLOTS = 7;
-const SLOT_GAP = 6;
+/** 58 + 7 = the original's 65px slot pitch (`gun0..gun6`, doc 14 §1.3). */
+const SLOT_GAP = 7;
 const SLOT_W = 58;
 const SLOT_H = 62;
 const RACK_W = RACK_SLOTS * SLOT_W + (RACK_SLOTS - 1) * SLOT_GAP;
@@ -1409,8 +1410,10 @@ export class Hud {
   }
 
   /**
-   * The magazine read-out: one tick per round in the clip, plus the original's
-   * "xN" multiplier giving whole reload-clips still in reserve (doc 14 §1.2).
+   * The magazine read-out: one tick per round in the clip — stacked into up to
+   * four rows for magazines past 25 rounds, as `bar_ammo0..3` does — plus the
+   * original's "xN" multiplier giving whole reload-clips still in reserve
+   * (doc 14 §1.2; `txt_clip.text = "x" + ammo.clip`, `Guns.as:190`).
    * Charge weapons (`percAmmo` / `oneClip`) have no clips to count, so their
    * multiplier slot shows the charge percentage instead.
    */

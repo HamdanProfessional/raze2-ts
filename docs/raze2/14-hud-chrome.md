@@ -47,10 +47,18 @@ at local (56,34)–(264,66) inside the weapon-holder clip.
 
 | Element | Instance | Notes |
 |---|---|---|
-| Clip text | `txt_clip` | x≈72, y≈550. Shows current-clip count as plain text. |
+| Clip text | `txt_clip` | x≈72, y≈550. Shows the **spare-magazine count**, printed as `"x" + ammo.clip` (`Guns.as:190`). Not the current clip — see the warning below. |
 | Multiplier label | inside char 1449 (`DefineEditTextTag`) | Example baked string `"x2"`, font **QTypeSquare-Book 11pt**, color `#CCCCCC`. |
-| Reserve-ammo bar | `bar_ammo0..3` (char 44 ×4) | `Hud.setAmmoBar()` (`Hud.as:451-552`) splits the reserve into **1–4 horizontal segments** depending on max reserve (`>25`→2 segs, `>50`→3, `>75`→4), each segment max 58px wide, 14px tall. Segment count is why the task brief calls this "segmented" — the segments represent whole reload-clips of reserve ammo, not shield pips. |
-| Segment tick lines | `ammoOutline` (Graphics, drawn at runtime) | `Hud.as:486-509`: `lineStyle(1, 0x333333, 1)` — dark-grey 1px divider lines drawn between segments and as the 14px-tall outline box. |
+| Magazine bar | `bar_ammo0..3` (char 44 ×4) | `Hud.setAmmoBar(ammo.cur, clipSize)` (`Hud.as:451-552`) shows the **rounds in the chambered magazine**, splitting the single 58×14 box into **1–4 stacked rows** by `clipSize` (`>25`→2 rows, `>50`→3, `>75`→4). Each row is 58px wide and `14/rows` px tall (`Hud.as:497-506`) — they are rows of one magazine, not separate reserve segments. The bottom row fills first and the top row drains first (`Hud.as:520-545`). |
+| Segment tick lines | `ammoOutline` (Graphics, drawn at runtime) | `Hud.as:486-509`: `lineStyle(1, 0x333333, 1)` — dark-grey 1px divider lines, drawn both as the per-round vertical grid and as the horizontal row dividers, inside the 14px-tall outline box. |
+
+> **Careful:** these two elements are easy to read backwards, and an earlier
+> revision of this table did. Every call site passes the magazine to the *bar*
+> and the spare count to the *text* — `txt_clip.text = "x" + ammo[n].clip;
+> hud.setAmmoBar(ammo[n].cur, gunSet[n].clipSize, n)` (`Guns.as:190-191`, and
+> identically at `:102`, `:164`, `:317`, `:429`). `ammo.cur` is rounds in the
+> chambered magazine; `ammo.clip` is the number of spare magazines
+> (`Guns.as:120-135`). There is no reserve *bar* in the original at all.
 | Fill colour | all 4 bars share tint add `(255,255,255)` | **`#FFFFFF` white** ammo fill (baked; not team/health colour). |
 
 ### 1.3 Weapon loadout strip (bottom, 7 slots)

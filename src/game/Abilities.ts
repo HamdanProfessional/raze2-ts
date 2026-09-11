@@ -220,14 +220,18 @@ function apply(unit: any, ab: AbilityDef): void {
       const def: WeaponDef = {
         ...WEAPONS.grenade,
         id: "grenade",
-        bounce: 3,
+        bounces: true,
         // Original Bullet_Proj_Bounce fuse = params[3]*30 = 60 frames = 2s
         // (Unit.as/Bullet_Proj_Bounce; the "1 second" flavor text is a SWF quirk).
         bounceLife: 60,
-        // grenade.dmg=45 → ×10 = 450; splashMult 0.7 (Stats_Guns.as:679-711).
+        // grenade.dmg=45 → ×10 = 450; splash radius 79 at 0.7 (Stats_Guns.as:679-711).
         damage: 450,
+        splashRadius: 79,
         splashMult: 0.7,
-        speed: 3,
+        // params ["grenade", 3, 3, 2]: 3 substeps (30px/frame), 0.3 gravity.
+        speed: 5,
+        substeps: 3,
+        gravity: 0.3,
       };
       const m = unit.getMuzzle(unit.fireRotation);
       game.addFrameEffect(new Projectile(game, unit, def, m.x, m.y, unit.fireRotation));
@@ -243,9 +247,11 @@ function apply(unit: any, ab: AbilityDef): void {
         mineLife: 900,
         // mine.dmg=55 → ×10 = 550; splashMult 0.7 (Stats_Guns.as:712-741).
         damage: 550,
+        splashRadius: 79,
         splashMult: 0.7,
         speed: 1,
-        fallSpeed: 1.2,
+        substeps: 1,
+        gravity: 1.2,
       };
       // Tossed gently forward-and-down so it settles just in front of the unit.
       const ang = unit.facing > 0 ? 30 : 150;

@@ -143,27 +143,35 @@ Aim is a smoothed 2D point (`aimX, aimY`) lerped toward a focus point every fram
 (**not** a discrete "aim error cone" — the imprecision comes from lerp lag + the gun's
 own recoil-spread, see §4.3).
 
-### 4.1 No target — "aimPlayer" campaign override
-If `matchInfo.extra` exists and `matchInfo.extra.aimPlayer` is falsy is NOT the branch —
-re-read: the *first* branch (`!matchInfo.extra || !matchInfo.extra.aimPlayer` is false,
-i.e. `aimPlayer` truthy is required to fall into normal target-seeking) is actually
-inverted in source — concretely:
+### 4.1 `aimPlayer` — the scripted-escort override
+**Target-based aim is the default. Tracking the human is the opt-in exception.**
+
+The decompiler leaves `AI.as:365-383` as raw stack ops, and the negation is easy to drop
+on the way past. The value pushed is the short-circuit
+`(!matchInfo.extra || !matchInfo.extra.aimPlayer)`, and the branch guard then *negates*
+it, so:
 ```
-if ( !matchInfo.extra || !matchInfo.extra.aimPlayer )   // default arena bots take this branch
+if ( matchInfo.extra && matchInfo.extra.aimPlayer )   // scripted escorts only
     aimX/aimY lerp 0.8 toward the human player, always (ignores `target` entirely)
 else
     normal target-seeking logic (below)
 ```
-This means **by default (`matchInfo.extra` absent, the normal skirmish/arena case), bots
-always aim at the human player** with a fast lerp factor of `0.8`
-(`aimX += (playerX - aimX) * 0.8`), completely bypassing the `target`/threat system for
-aiming purposes — the `target` object is still used for the *shoot* gate later
-(`AI.as:620`: `if(game.gameStarted && target && diff)`), but the muzzle direction always
-tracks the human player specifically. Only levels/matches that populate
-`matchInfo.extra.aimPlayer = true` (campaign-specific) switch to genuine
-target-based aiming.
+Compare `AI.as:477`, `if(!matchInfo.extra || !matchInfo.extra.noStand)`, which guards its
+body with the *same* idiom but without the extra `!` — the negation here is load-bearing.
 
-### 4.2 Target-based aim (only when `matchInfo.extra.aimPlayer` is set)
+Corroboration from the data: `campaign.json` sets `aimPlayer` on exactly one unit,
+J. Rockit, the tutorial escort, and the mission script later clears it so he stops
+keeping his gun on you and starts fighting normally (see doc 10). That only makes sense
+if `aimPlayer` means "aim at the player".
+
+> **Do not "fix" this back.** An earlier revision of this section argued the branches were
+> inverted, and the port was briefly written as `(!campaign || extra.aimPlayer)`. That
+> made every arena bot aim along a line to the human while validating the shot against a
+> different unit, so bots fired into walls whenever the player was not on that line.
+> Measured after the correction: bots target the human in 0/270 samples, and never fire
+> without a target. 0/270 is the fix working, not a bug.
+
+### 4.2 Target-based aim (the default for every ordinary bot)
 ```
 focus = target.dead ? corpse ragdoll position (+10 y) : (target.x, target.y - 50)
 aimX += (focusX - aimX) * aimSpeed      // aimSpeed from diff table above

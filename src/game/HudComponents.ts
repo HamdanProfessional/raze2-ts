@@ -184,12 +184,27 @@ export function bezelTile(g: Graphics, x: number, y: number, w: number, h: numbe
   razeGlass(g, x + 4, y + 4, w - 8, h - 8, 0.95);
 }
 
-/** Magazines past this many rounds are down-sampled so the ticks stay legible. */
-export const CLIP_MAX_TICKS = 36;
+/**
+ * How many stacked rows the magazine read-out splits into
+ * (`Hud.setAmmoBar()`, `Hud.as:453-468`): one row up to 25 rounds, then one
+ * more per 25, capped at 4. Splitting is how the original keeps a 100-round
+ * drum at one tick per round instead of down-sampling the strip.
+ */
+export function clipRows(rounds: number): number {
+  if (rounds > 75) return 4;
+  if (rounds > 50) return 3;
+  if (rounds > 25) return 2;
+  return 1;
+}
 
 /**
- * The magazine read-out: one vertical tick per round, lit for rounds still
- * chambered and near-black for spent ones.
+ * The magazine read-out (`bar_ammo0..3`): one vertical tick per round, lit for
+ * rounds still chambered and near-black for spent ones, stacked into 1-4 rows
+ * once the magazine passes 25 rounds.
+ *
+ * The rows drain top-first — `bar_ammo0` (the top one) holds only what spills
+ * over the rows below it (`Hud.as:520-545`), so the bottom row is the last to
+ * empty. Surprising, but it is what the original does.
  */
 export function drawClipTicks(
   g: Graphics,
@@ -202,14 +217,29 @@ export function drawClipTicks(
   color: number = C_AMMO_WHITE,
 ): void {
   razeGlass(g, x, y, w, h);
-  const n = Math.max(1, Math.min(CLIP_MAX_TICKS, Math.round(rounds) || 1));
-  const lit = Math.round(clamp01(per) * n);
-  const pitch = w / n;
+  const total = Math.max(1, Math.round(rounds) || 1);
+  const rows = clipRows(total);
+  // `Hud.as:471` coerces `clipSize / rows` to uint, so a 35-round magazine is
+  // two rows of 17 and the odd round never gets a tick of its own.
+  const perRow = Math.max(1, Math.floor(total / rows));
+  const lit = Math.round(clamp01(per) * total);
+  const rowH = h / rows;
+  const pitch = w / perRow;
   const tw = Math.max(1, pitch - 1);
-  for (let i = 0; i < n; i++) {
-    const on = i < lit;
-    g.rect(x + i * pitch + (pitch - tw) / 2, y + 3, tw, h - 6)
-      .fill({ color: on ? color : C_AMMO_GRID_LINE, alpha: on ? 0.95 : 0.85 });
+  const inset = rows > 1 ? 1 : 3;
+  for (let r = 0; r < rows; r++) {
+    const rowLit = Math.max(0, Math.min(perRow, lit - (rows - 1 - r) * perRow));
+    const ty = y + r * rowH;
+    for (let i = 0; i < perRow; i++) {
+      const on = i < rowLit;
+      g.rect(x + i * pitch + (pitch - tw) / 2, ty + inset, tw, rowH - inset * 2)
+        .fill({ color: on ? color : C_AMMO_GRID_LINE, alpha: on ? 0.95 : 0.85 });
+    }
+    // Row divider, drawn in `ammoOutline`'s own 1px #333333 (`Hud.as:486`).
+    if (r > 0) {
+      g.moveTo(x, ty).lineTo(x + w, ty)
+        .stroke({ color: C_AMMO_GRID_LINE, width: 1, alpha: 0.9 });
+    }
   }
 }
 

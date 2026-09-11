@@ -16,10 +16,12 @@ const FIRE_DAMAGE = (RAZE2_WEAPON_BY_ID.fire?.dmg ?? 1) * 10;
  * enemy is a bullet sponge. Damage is soaked by shield first, then health. Reaching 0 HP triggers the unit's
  * death (which spawns the ragdoll via the physics layer).
  *
- * Power-up timers at 30 fps:
- *   ddamage — double outgoing damage for 450 frames (15s)
- *   fade    — 60% alpha cloak + reduced hit radius for 450 frames
- *   invin   — full invulnerability for 300 frames (10s)
+ * Power-up timers at 30 fps (frame counts, NOT on the x10 HP scale):
+ *   ddamage — double outgoing damage for 210 frames (7s)
+ *   rapid   — halved shot delay / free ammo for 195 frames (6.5s)
+ *   invin   — full invulnerability for 165 frames (5.5s)
+ *   fade    — 60% alpha cloak + reduced hit radius; port-only (Raze 2 has no
+ *             fade pickup, cloak is an ability), so its 450 is not from the SWF
  */
 export class Status {
   hpMax: number;
@@ -147,11 +149,14 @@ export class Status {
     const pu = this.unit.equips?.powerup || 1;
     switch (kind) {
       case "spawn":  this.invuln = 30; break;
-      case "ddamage": this.ddamageTimer = Math.round(450 * pu); break;
+      // `NodePickup.as:222` — 7 s (7*30), stretched by Power Extender.
+      case "ddamage": this.ddamageTimer = Math.round(210 * pu); break;
       // `NodePickup.as:245` — 6.5 s, stretched by Power Extender like the rest.
       case "rapid":   this.rapidTimer = Math.round(195 * pu); break;
+      // No SWF counterpart — see the class doc. Port-only value.
       case "fade":    this.fadeTimer = Math.round(450 * pu); break;
-      case "invin":   this.invinTimer = Math.round(300 * pu); break;
+      // `NodePickup.as:203` — 5.5 s (5.5*30), the shortest of the three.
+      case "invin":   this.invinTimer = Math.round(165 * pu); break;
     }
   }
 
@@ -196,6 +201,8 @@ export class Status {
       y: number;
       headShot?: boolean;
       region?: string;
+      /** Killing weapon's Raze 2 `force`, used to scale the death ragdoll kick. */
+      force?: number;
       /**
        * Ignore spawn invulnerability and the invincibility power-up — the
        * `param5` of `Status.as:204`, which skips the `sSpawn` / `sInvin` /

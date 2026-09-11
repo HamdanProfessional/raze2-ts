@@ -2508,7 +2508,7 @@ export class Unit {
   /** Called by Status when HP hits 0. Spawns the ragdoll + dropped gun. */
   killGuy(info: {
     attacker?: any; x: number; y: number; headShot?: boolean; region?: string;
-    cause?: KillCause;
+    force?: number; cause?: KillCause;
   }): void {
     this.status.dead = true;
     this.view.visible = false;
@@ -2537,6 +2537,7 @@ export class Unit {
       x: info.x,
       y: info.y,
       headShot: info.headShot,
+      force: info.force,
     });
     this.game.rdPhys.makeGun(this);
 

@@ -32,6 +32,8 @@ export interface DeathImpulse {
   x: number;
   y: number;
   headShot?: boolean;
+  /** Raze 2 `force` stat of the killing weapon (3..30). Defaults to the median. */
+  force?: number;
 }
 
 const TIME_STEP = 1 / FPS;
@@ -112,12 +114,19 @@ export class Phys {
 
     // Directional blow: headshots take the head clean off and throw it; every
     // other killing blow just kicks a random limb.
+    //
+    // The body kick scales with the weapon's `force` stat but the head pop does
+    // not — `PhysWorld.as:144` impulses the body by `param3.force` and then
+    // :155 impulses the head by a flat 8 whatever killed it. 15 is the arsenal's
+    // median force, so it is the value that leaves a mid-weight weapon feeling
+    // as it did while restoring the 3..30 spread between a pistol and a rocket.
     if (impulse.headShot) {
       actor.detachHead();
       this.applyForce(actor.part_head, impulse.x * 35, impulse.y * 20 - 50);
     } else {
       const limb = actor.limbs[Math.floor(Math.random() * actor.limbs.length)];
-      this.applyForce(limb, impulse.x * 15, impulse.y * 15);
+      const force = impulse.force ?? 15;
+      this.applyForce(limb, impulse.x * force, impulse.y * force);
     }
   }
 
