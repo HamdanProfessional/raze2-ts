@@ -99,12 +99,25 @@ GUN_FRAME = {
 }
 MARGIN = 4.0
 QUANT_COLORS = 255
+# Palette-quantising anti-aliased vector art costs edge quality for size. Off
+# with --no-quant, which keeps full RGBA.
 
 args = sys.argv[1:]
 DO_RENDER = "--no-render" not in args
 only_skins = None
 if "--skins" in args:
     only_skins = set(args[args.index("--skins") + 1].split(","))
+only_guns = None
+if "--guns" in args:
+    only_guns = set(args[args.index("--guns") + 1].split(","))
+# Supersample factor. The source is vector, so this is free detail: the game
+# renders at `scale * devicePixelRatio` (Engine.setupScaling), which on an
+# ordinary 1080p window is already ~1.7x and on a hi-dpi panel up to 4x. Baking
+# at 1x meant every gun and hand was being magnified from a 1x raster.
+QUANT = "--no-quant" not in args
+SCALE = 1
+if "--scale" in args:
+    SCALE = max(1, int(args[args.index("--scale") + 1]))
 
 weapons = json.load(open(os.path.join(ROOT, "src", "assets", "raze2", "weapons.json")))
 skins = json.load(open(os.path.join(ROOT, "src", "assets", "raze2", "skins.json")))
@@ -304,6 +317,8 @@ for w in weapons:
     frames = band_frames(pose)
     body = "".join(draw(mat1, f, [("gun", 380)], *cell_xy(i))
                    for i, f in enumerate(frames))
+    if only_guns is not None and wid not in only_guns:
+        continue
     d = os.path.join(OUT_SVG, "gun")
     os.makedirs(d, exist_ok=True)
     sp = os.path.join(d, f"{wid}.svg")
@@ -321,8 +336,14 @@ if skipped:
         print("   ", s)
 
 json.dump({
-    "cell": [CW, CH],
+    # `cell` is in TEXTURE pixels so the runtime slices correctly; `scale` is the
+    # multiplier that takes the sprite back to its logical on-screen size, the
+    # same convention skinAnim.json uses. `anchor` is normalised, so it is
+    # resolution-independent and does not change with the supersample factor.
+    "cell": [CW * SCALE, CH * SCALE],
     "cols": COLS,
+    "scale": round(1.0 / SCALE, 6),
+    "supersample": SCALE,
     "anchor": [round(OX / CW, 5), round(OY / CH, 5)],
     "bands": {b: i for i, b in enumerate(BAND_ORDER)},
     "note": ("Authentic Raze 2 arms baked from DefineSprite_387 (arm1) and "
@@ -349,7 +370,7 @@ if not DO_RENDER:
 total = 0
 with sync_playwright() as pw:
     br = pw.chromium.launch(args=["--use-gl=swiftshader"])
-    pg = br.new_page(viewport={"width": 64, "height": 64}, device_scale_factor=1)
+    pg = br.new_page(viewport={"width": 64, "height": 64}, device_scale_factor=SCALE)
     for i, (src, dest, w, h, label) in enumerate(jobs):
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         pg.set_viewport_size({"width": w, "height": h})
@@ -361,8 +382,10 @@ with sync_playwright() as pw:
         pg.screenshot(path=dest, omit_background=True,
                       clip={"x": 0, "y": 0, "width": w, "height": h})
         im = Image.open(dest).convert("RGBA")
-        im.quantize(colors=QUANT_COLORS, method=Image.FASTOCTREE,
-                    dither=Image.Dither.NONE).save(dest, optimize=True, compress_level=9)
+        if QUANT:
+            im = im.quantize(colors=QUANT_COLORS, method=Image.FASTOCTREE,
+                             dither=Image.Dither.NONE)
+        im.save(dest, optimize=True, compress_level=9)
         total += os.path.getsize(dest)
         if i % 20 == 0 or i == len(jobs) - 1:
             print(f"  [{i+1}/{len(jobs)}] {label:<24} {os.path.getsize(dest)//1024}K")

@@ -43,6 +43,14 @@ interface StateInfo {
 }
 interface AnimManifest {
   cell: [number, number];
+  /**
+   * Texture px per logical px. The sheets are supersampled because the renderer
+   * draws at `scale x devicePixelRatio` (Engine), so a 1x bake was magnified.
+   * Kept SEPARATE from `scale`: the shoulder/ability attach tracks are in clip
+   * px and ride `scale`, so folding the texture factor into it would walk the
+   * arm off the shoulder. Older manifests omit it.
+   */
+  supersample?: number;
   anchor: [number, number];
   origin: [number, number];
   sheet: [number, number];
@@ -56,6 +64,8 @@ interface AnimManifest {
 
 const manifest = SKIN_ANIM as unknown as AnimManifest;
 const [CW, CH] = manifest.cell;
+/** Multiplier from baked texture px back to logical px. */
+const TEX_SCALE = 1 / (manifest.supersample ?? 1);
 const COLS = manifest.cols;
 
 // Loaded sheet TextureSource per skin id, and a cache of per-cell sub-textures.
@@ -70,6 +80,8 @@ export const SkinAnim = {
   loaded: false,
   manifest,
   scale: manifest.scale,
+  /** Apply to the body sprite ONLY, on top of `scale`. */
+  texScale: TEX_SCALE,
 
   /** Feet/clip-origin as a sprite anchor (feet land on the unit origin). */
   anchor(): { x: number; y: number } {

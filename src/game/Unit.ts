@@ -1115,7 +1115,11 @@ export class Unit {
       const bs = this.bodyScale();
       this.bodySprite.anchor.set(a.x, a.y);
       this.bodySprite.y = 0;
-      this.bodySprite.scale.set(bs * this.facing, bs);
+      // texScale takes the supersampled sheet back to logical size. It belongs
+      // here and not in `bodyScale()`, which the shoulder/neck/ability attach
+      // tracks multiply against in clip px.
+      const ts = bs * SkinAnim.texScale;
+      this.bodySprite.scale.set(ts * this.facing, ts);
       this.updateAbilitySlot(render);
     } else if (this.bodySprite) {
       let tex = this.bodyFrame(state, this.animFrame);
@@ -1147,7 +1151,11 @@ export class Unit {
       // the shoulder track is measured in the (skin or rig) body's clip px and so
       // rides that body's scale (`bs`).
       const bs = this.bodyScale();
-      const as = ARM_SCALE;
+      // ARM_SCALE is the arm's LOGICAL size; ArmAnim.scale takes the sheet's
+      // supersampled pixels back down to it. Keeping the two separate matters:
+      // the muzzle offsets in muzzle.json are measured in logical px, so they
+      // multiply by ARM_SCALE alone and must not pick up the texture factor.
+      const as = ARM_SCALE * ArmAnim.scale;
       const sh = this.shoulder();
       arm.x = sh.x * bs * this.facing;
       arm.y = sh.y * bs;

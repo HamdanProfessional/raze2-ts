@@ -52,9 +52,17 @@ export interface ArmPose {
 export type ArmBand = "back" | "front" | "arm2";
 
 interface ArmAnimManifest {
+  /** Cell size in TEXTURE pixels (logical size x `supersample`). */
   cell: [number, number];
   cols: number;
   anchor: [number, number];
+  /**
+   * Multiplier back to logical on-screen size. The sheets are supersampled
+   * because the renderer draws at `scale x devicePixelRatio` (Engine), which is
+   * ~1.7x on a 1080p window and up to 4x hi-dpi -- a 1x bake was being magnified
+   * the whole way. Same convention as skinAnim.json. Older manifests omit it.
+   */
+  scale?: number;
   bands: Record<ArmBand, number>;
   note: string;
   poses: Record<string, ArmPose>;
@@ -65,6 +73,7 @@ interface ArmAnimManifest {
 const manifest = ARM_ANIM as unknown as ArmAnimManifest;
 const [CW, CH] = manifest.cell;
 const COLS = manifest.cols;
+const ART_SCALE = manifest.scale ?? 1;
 
 /** The skin every unit falls back to until its own sheet has arrived. */
 const DEFAULT_SKIN = "raze";
@@ -103,6 +112,9 @@ function loadOnce(key: string, url: string, into: Map<string, Texture>): void {
 }
 
 export const ArmAnim = {
+  /** Multiplier from baked texture pixels back to logical on-screen pixels. */
+  scale: ART_SCALE,
+
   loaded: false,
   manifest,
 
