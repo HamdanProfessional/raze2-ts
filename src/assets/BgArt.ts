@@ -1,5 +1,5 @@
 import { Assets, Texture } from "pixi.js";
-import { ASSET_BASE } from "../core/Config";
+import { ASSET_BASE, ASSET_V } from "../core/Config";
 import BG_RIG from "./bgRig.json";
 
 /**
@@ -57,7 +57,7 @@ function mapId(level: string): string {
 async function one(kind: "bg" | "sky", label: string): Promise<void> {
   if (!label || cache.has(key(kind, label))) return;
   try {
-    const t = await Assets.load<Texture>(`${ASSET_BASE}/${kind}/${slug(label)}.png`);
+    const t = await Assets.load<Texture>(`${ASSET_BASE}/${kind}/${slug(label)}.png?v=${ASSET_V}`);
     cache.set(key(kind, label), t);
   } catch {
     /* a missing layer just doesn't draw */

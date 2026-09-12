@@ -1,5 +1,5 @@
 import { Assets, Texture } from "pixi.js";
-import { ASSET_BASE } from "../core/Config";
+import { ASSET_BASE, ASSET_V } from "../core/Config";
 import SKIN_ART from "./raze2/skinArt.json";
 
 /**
@@ -47,7 +47,7 @@ const manifest = SKIN_ART as unknown as SkinManifest;
 const cache = new Map<string, Texture>();
 
 function url(id: string): string {
-  return `${ASSET_BASE}/skins/${id}.png`;
+  return `${ASSET_BASE}/skins/${id}.png?v=${ASSET_V}`;
 }
 
 export const SkinArt = {

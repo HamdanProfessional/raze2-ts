@@ -1,5 +1,5 @@
 import { Assets, Texture } from "pixi.js";
-import { ASSET_BASE } from "../core/Config";
+import { ASSET_BASE, ASSET_V } from "../core/Config";
 import { artIdFor } from "./weaponArtAlias";
 import { RAZE2_WEAPONS } from "./raze2";
 
@@ -34,11 +34,11 @@ export const PickupWeaponArt = {
   async load(): Promise<void> {
     await Promise.all([
       ...TYPES.map((t) =>
-        Assets.load<Texture>(`${ASSET_BASE}/pickups/weapons/${t}.png`)
+        Assets.load<Texture>(`${ASSET_BASE}/pickups/weapons/${t}.png?v=${ASSET_V}`)
           .then((tex) => void cache.set(t, tex))
           .catch(() => {}),
       ),
-      Assets.load<Texture>(`${ASSET_BASE}/pickups/base.png`)
+      Assets.load<Texture>(`${ASSET_BASE}/pickups/base.png?v=${ASSET_V}`)
         .then((tex) => void (baseTex = tex))
         .catch(() => {}),
     ]);

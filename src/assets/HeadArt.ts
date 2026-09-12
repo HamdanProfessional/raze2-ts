@@ -1,5 +1,5 @@
 import { Assets, Texture } from "pixi.js";
-import { ASSET_BASE } from "../core/Config";
+import { ASSET_BASE, ASSET_V } from "../core/Config";
 import HEAD_RIG from "./headRig.json";
 
 /**
@@ -30,7 +30,7 @@ const rig = HEAD_RIG as unknown as HeadRig;
 const cache = new Map<number, Texture>();
 
 function url(id: number): string {
-  return `${ASSET_BASE}/heads/${id}.png`;
+  return `${ASSET_BASE}/heads/${id}.png?v=${ASSET_V}`;
 }
 
 export const HeadArt = {

@@ -1,5 +1,5 @@
 import { Assets, Texture } from "pixi.js";
-import { ASSET_BASE } from "../core/Config";
+import { ASSET_BASE, ASSET_V } from "../core/Config";
 import RAZE2_MAPS from "./raze2maps.json";
 
 /**
@@ -36,7 +36,7 @@ const cache = new Map<string, Texture>();
 const pending = new Map<string, Promise<void>>();
 
 function url(file: string): string {
-  return `${ASSET_BASE}/${file}`;
+  return `${ASSET_BASE}/${file}?v=${ASSET_V}`;
 }
 
 /** Load `file` into `key` once; concurrent callers share the same request. */

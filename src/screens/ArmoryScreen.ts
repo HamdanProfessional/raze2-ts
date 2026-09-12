@@ -1,11 +1,13 @@
-import { Container, Graphics, Sprite, Text, TextStyle } from "pixi.js";
+import { Container, Graphics, Sprite, Text, TextStyle, Texture } from "pixi.js";
 import { Screen } from "../core/Screen";
 import { GAME_WIDTH, GAME_HEIGHT } from "../core/Config";
 import { SD } from "../state/SD";
 import { Sound } from "../audio/Sounds";
 import { UiArt } from "../assets/UiArt";
 import { ArmArt } from "../assets/ArmArt";
+import { ArmAnim } from "../assets/ArmAnim";
 import { SkinArt } from "../assets/SkinArt";
+import { SkinAnim } from "../assets/SkinAnim";
 import { RAZE2_WEAPON_BY_ID, RAZE2_SKINS } from "../assets/raze2";
 import { equippedGuns, ensureLoadout, LOADOUT_MAX } from "../game/Armory";
 import { equippedInSlot, equipById } from "../game/Equipment";
@@ -373,10 +375,13 @@ export class ArmoryScreen extends Screen {
         def?.name ?? (id ?? "— empty —"), !!id, C_OPTIONS_GREEN,
       );
       if (id) {
-        const icon = ArmArt.getIcon(id);
+        const icon = ArmAnim.gunIcon(id) ?? ArmArt.getIcon(id);
         if (icon) {
           const sp = new Sprite(icon);
-          sp.scale.set(Math.min(46 / (icon.width || 46), 24 / (icon.height || 24), 2));
+          // The 2x cap is on the weapon's logical size; ArmAnim.scale takes the
+          // supersampled sheet back down to it (see ArmoryBrowseScreen).
+          sp.scale.set(Math.min(46 / (icon.width || 46), 24 / (icon.height || 24),
+                                2 * ArmAnim.scale));
           sp.anchor.set(1, 0.5);
           sp.x = w - 16; sp.y = y + 11;
           s.body.addChild(sp);
@@ -405,7 +410,73 @@ export class ArmoryScreen extends Screen {
    */
   private previewKey(): string {
     const id = this.previewSkin();
-    return `${id}:${SkinArt.getTexture(id) ? "art" : "none"}`;
+    const gun = equippedGuns()[0] ?? "";
+    const ready = SkinAnim.getFrame(id, "idle", 0) ? "anim" :
+      (SkinArt.getTexture(id) ? "art" : "none");
+    return `${id}:${gun}:${ready}`;
+  }
+
+
+  /**
+   * Compose the preview from the same two bakes the in-game unit uses:
+   * SkinAnim for the body (head and legs included) and ArmAnim for the back
+   * arm, the gun and the gripping front arm, welded at the skin's own per-frame
+   * shoulder point. Mirrors Unit.drawFigure's placement, held at the idle frame
+   * with the arm level.
+   *
+   * Returns false if either bake is missing, so the caller can fall back.
+   */
+  private buildRiggedPreview(): boolean {
+    const skin = this.previewSkin();
+    const body = SkinAnim.getFrame(skin, "idle", 0);
+    if (!body) return false;
+    const gun = equippedGuns()[0] ?? "";
+    const hasArm = !!gun && !!ArmAnim.pose(gun);
+
+    const fig = new Container();
+    const a = SkinAnim.anchor();
+    const bs = SkinAnim.scale * SkinAnim.texScale;
+
+    const bodySpr = new Sprite(body);
+    bodySpr.anchor.set(a.x, a.y);
+    bodySpr.scale.set(bs);
+
+    if (hasArm) {
+      // The shoulder track is in the body's clip px, so it rides SkinAnim.scale
+      // — NOT texScale, which only takes the supersampled sheet back to logical
+      // size. Conflating the two walks the arm off the shoulder.
+      const sh = SkinAnim.shoulder("idle", 0);
+      const as = ArmAnim.scale;
+      const aa = ArmAnim.anchor();
+      const mk = (tex: Texture | null): Sprite | null => {
+        if (!tex) return null;
+        const sp = new Sprite(tex);
+        sp.anchor.set(aa.x, aa.y);
+        sp.scale.set(as);
+        sp.x = sh.x * SkinAnim.scale;
+        sp.y = sh.y * SkinAnim.scale;
+        return sp;
+      };
+      const idle = ArmAnim.pose(gun)?.idle ?? 0;
+      const back = mk(ArmAnim.skinCell(skin, gun, "arm2", idle));
+      const armBack = mk(ArmAnim.skinCell(skin, gun, "back", idle));
+      const gunSpr = mk(ArmAnim.gunCell(gun, idle));
+      const armFront = mk(ArmAnim.skinCell(skin, gun, "front", idle));
+      // Draw order matches the SWF: back arm, body, near arm, gun, grip hand.
+      if (back) fig.addChild(back);
+      fig.addChild(bodySpr);
+      for (const sp of [armBack, gunSpr, armFront]) if (sp) fig.addChild(sp);
+    } else {
+      fig.addChild(bodySpr);
+    }
+
+    // Size off the feet mark like the flat path: the figure occupies only
+    // crown-to-feet inside its cell.
+    const feetPx = SkinAnim.anchor().y * (body.height * SkinAnim.texScale);
+    fig.scale.set(PREVIEW_H / (feetPx || PREVIEW_H));
+    this.previewLayer.addChild(fig);
+    this.previewSprite = bodySpr;
+    return true;
   }
 
   private rebuildPreview(): void {
@@ -413,10 +484,16 @@ export class ArmoryScreen extends Screen {
     this.previewSprite = null;
     this.previewBuiltKey = this.previewKey();
 
-    // The complete baked idle figure — body, head, BOTH arms and legs (see
-    // SkinArt's header). The animated bake (`SkinAnim`) is deliberately not
-    // used here: it omits the aiming front arm, which the live in-game rig
-    // overlays and a static menu preview has no way to supply.
+    // Preferred: build the figure the way the live unit does — the 2x SkinAnim
+    // body with the ArmAnim arm stack welded on at the shoulder. SkinAnim alone
+    // omits the aiming front arm, which is why this used to fall back to the
+    // flat SkinArt figure; ArmAnim supplies exactly that missing arm, so the
+    // preview can now be both complete AND sharp. SkinArt is 86x96 native and
+    // was being magnified ~2.2x to fill the panel (~3.7x once the renderer's
+    // own device scaling is counted), which is what made it look soft.
+    if (this.buildRiggedPreview()) return;
+
+    // Fallback: the flat baked idle figure, complete but low-res.
     const tex = SkinArt.getTexture(this.previewSkin());
     if (tex) {
       const a = SkinArt.anchor();

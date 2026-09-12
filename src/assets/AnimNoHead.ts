@@ -1,5 +1,5 @@
 import { Assets, Texture } from "pixi.js";
-import { ASSET_BASE } from "../core/Config";
+import { ASSET_BASE, ASSET_V } from "../core/Config";
 import type { AnimState } from "./Anim";
 
 /**
@@ -27,7 +27,7 @@ const FRAME_COUNT: Record<AnimState, number> = {
 const cache = new Map<string, Texture>();
 
 function url(state: AnimState, frame: number): string {
-  return `${ASSET_BASE}/anim-nohead/${state}/${frame}.png`;
+  return `${ASSET_BASE}/anim-nohead/${state}/${frame}.png?v=${ASSET_V}`;
 }
 
 export const AnimNoHead = {

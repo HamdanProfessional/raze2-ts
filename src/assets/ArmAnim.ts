@@ -1,5 +1,5 @@
 import { Assets, Rectangle, Texture } from "pixi.js";
-import { ASSET_BASE } from "../core/Config";
+import { ASSET_BASE, ASSET_V } from "../core/Config";
 import ARM_ANIM from "./raze2/armAnim.json";
 
 /**
@@ -67,6 +67,8 @@ interface ArmAnimManifest {
   note: string;
   poses: Record<string, ArmPose>;
   weapons: Record<string, string>;
+  /** Per-weapon bbox of the gun in its idle cell, [x, y, w, h] in texture px. */
+  gunTrim?: Record<string, [number, number, number, number]>;
   skins: string[];
 }
 
@@ -85,9 +87,9 @@ const pending = new Set<string>();
 
 const GUN_IDS = Object.keys(manifest.weapons);
 
-const gunUrl = (id: string) => `${ASSET_BASE}/arms-r2/gun/${id}.png`;
+const gunUrl = (id: string) => `${ASSET_BASE}/arms-r2/gun/${id}.png?v=${ASSET_V}`;
 const skinUrl = (skin: string, pose: string) =>
-  `${ASSET_BASE}/arms-r2/skin/${skin}/${pose}.png`;
+  `${ASSET_BASE}/arms-r2/skin/${skin}/${pose}.png?v=${ASSET_V}`;
 
 /** Slice a cell out of a loaded sheet, memoised. */
 function cellOf(sheet: Texture, key: string, i: number): Texture {
@@ -167,6 +169,40 @@ export const ArmAnim = {
     for (const p of Object.keys(manifest.poses)) {
       loadOnce(`${skinId}/${p}`, skinUrl(skinId, p), skinSheets);
     }
+  },
+
+  /**
+   * The weapon alone, cropped tight, for menu chrome (armoury / loadout).
+   *
+   * `gunCell` hands back the whole 225x267 cell, which is mostly the empty field
+   * the arm swings through -- fitting that to a plate renders the gun as a
+   * speck. This trims to the art's own bbox, so a caller can size by the weapon
+   * rather than by the cell. Loads the sheet on first ask and returns null until
+   * it lands, so callers must be prepared to rebuild.
+   */
+  gunIcon(weaponId: string): Texture | null {
+    const pose = this.pose(weaponId);
+    if (!pose) return null;
+    loadOnce(weaponId, gunUrl(weaponId), gunSheets);
+    const sheet = gunSheets.get(weaponId);
+    if (!sheet) return null;
+    const trim = manifest.gunTrim?.[weaponId];
+    const i = pose.idle;
+    if (!trim) return cellOf(sheet, `g:${weaponId}:${i}`, i);
+    const key = `icon:${weaponId}`;
+    let tex = frames.get(key);
+    if (!tex) {
+      tex = new Texture({
+        source: sheet.source,
+        frame: new Rectangle(
+          (i % COLS) * CW + trim[0],
+          Math.floor(i / COLS) * CH + trim[1],
+          trim[2], trim[3],
+        ),
+      });
+      frames.set(key, tex);
+    }
+    return tex;
   },
 
   /** The weapon's gun art for a 0-based band cell. */

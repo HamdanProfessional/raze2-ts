@@ -1,5 +1,5 @@
 import { Assets, Texture } from "pixi.js";
-import { ASSET_BASE } from "../core/Config";
+import { ASSET_BASE, ASSET_V } from "../core/Config";
 import MANIFEST from "../assets/raze2/cutscene.json";
 import { getCamp } from "./Campaign";
 import { SD } from "../state/SD";
@@ -133,7 +133,7 @@ export function loadPanels(ids: string[]): Promise<void> {
     if (cache.has(id)) return Promise.resolve();
     const inFlight = pending.get(id);
     if (inFlight) return inFlight;
-    const job = Assets.load<Texture>(`${ASSET_BASE}/cutscene/${id}.webp`)
+    const job = Assets.load<Texture>(`${ASSET_BASE}/cutscene/${id}.webp?v=${ASSET_V}`)
       .then((t) => void cache.set(id, t))
       .catch(() => {});
     pending.set(id, job);

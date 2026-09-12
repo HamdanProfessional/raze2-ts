@@ -1,5 +1,5 @@
 import { Assets, Rectangle, Texture } from "pixi.js";
-import { ASSET_BASE } from "../core/Config";
+import { ASSET_BASE, ASSET_V } from "../core/Config";
 import SKIN_ANIM from "./raze2/skinAnim.json";
 
 /**
@@ -73,7 +73,7 @@ const sheets = new Map<string, Texture>();
 const frames = new Map<string, Texture>();
 
 function url(id: string): string {
-  return `${ASSET_BASE}/skins/anim/${id}.png`;
+  return `${ASSET_BASE}/skins/anim/${id}.png?v=${ASSET_V}`;
 }
 
 export const SkinAnim = {

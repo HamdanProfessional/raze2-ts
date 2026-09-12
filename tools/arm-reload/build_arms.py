@@ -115,6 +115,11 @@ if "--guns" in args:
 # ordinary 1080p window is already ~1.7x and on a hi-dpi panel up to 4x. Baking
 # at 1x meant every gun and hand was being magnified from a 1x raster.
 QUANT = "--no-quant" not in args
+# Recompute the per-weapon icon trim from the PNGs already on disk, without
+# re-rendering. The armoury needs a tight box round the gun: a cell is mostly
+# the empty field the arm swings through, so anything that fits the whole cell
+# to a plate draws the weapon as a speck.
+TRIM_ONLY = "--trim-only" in args
 SCALE = 1
 if "--scale" in args:
     SCALE = max(1.0, float(args[args.index("--scale") + 1]))
@@ -371,6 +376,31 @@ json.dump({
 }, open(MANIFEST, "w"), indent=1)
 print("wrote", os.path.normpath(MANIFEST))
 
+def write_gun_trims():
+    """Bbox of the idle cell's gun art, per weapon, in TEXTURE px."""
+    m = json.load(open(MANIFEST))
+    cw, ch = m["cell"]
+    trims = {}
+    for wid, pose in m["weapons"].items():
+        f = os.path.join(OUT_PNG, "gun", f"{wid}.png")
+        if not os.path.exists(f):
+            continue
+        idx = m["poses"][pose]["idle"]
+        cols = m["cols"]
+        x, y = (idx % cols) * cw, (idx // cols) * ch
+        with Image.open(f) as im:
+            bb = im.convert("RGBA").crop((x, y, x + cw, y + ch)).getbbox()
+        if bb:
+            trims[wid] = [bb[0], bb[1], bb[2] - bb[0], bb[3] - bb[1]]
+    m["gunTrim"] = trims
+    json.dump(m, open(MANIFEST, "w"), indent=1)
+    print(f"gunTrim: {len(trims)} weapons -> {os.path.normpath(MANIFEST)}")
+
+
+if TRIM_ONLY:
+    write_gun_trims()
+    raise SystemExit(0)
+
 if not DO_RENDER:
     print("--no-render: stopping before rasterisation")
     raise SystemExit(0)
@@ -398,4 +428,5 @@ with sync_playwright() as pw:
         if i % 20 == 0 or i == len(jobs) - 1:
             print(f"  [{i+1}/{len(jobs)}] {label:<24} {os.path.getsize(dest)//1024}K")
     br.close()
+write_gun_trims()
 print(f"done -> {OUT_PNG}   total {total/1048576:.1f} MB")

@@ -1,5 +1,5 @@
 import { Assets, Texture } from "pixi.js";
-import { ASSET_BASE } from "../core/Config";
+import { ASSET_BASE, ASSET_V } from "../core/Config";
 import PART_RIG from "./partRig.json";
 
 /**
@@ -46,7 +46,7 @@ const NAME: Record<number, string> = { 456: "neck", 486: "foot", 550: "leglow", 
 const cache = new Map<string, Texture>();
 
 function url(cid: number, frame: number): string {
-  return `${ASSET_BASE}/body-parts/${NAME[cid]}/${frame}.png`;
+  return `${ASSET_BASE}/body-parts/${NAME[cid]}/${frame}.png?v=${ASSET_V}`;
 }
 
 export const PartArt = {

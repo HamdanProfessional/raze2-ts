@@ -1,5 +1,5 @@
 import { Assets, Texture } from "pixi.js";
-import { ASSET_BASE } from "../core/Config";
+import { ASSET_BASE, ASSET_V } from "../core/Config";
 
 /**
  * Power-up floater icons, baked from the SWF by `tools/pickups/bake.py`.
@@ -35,7 +35,7 @@ export const PickupArt = {
   async load(): Promise<void> {
     await Promise.all(
       KINDS.map((k) =>
-        Assets.load<Texture>(`${ASSET_BASE}/pickups/${k}.png`)
+        Assets.load<Texture>(`${ASSET_BASE}/pickups/${k}.png?v=${ASSET_V}`)
           .then((t) => void cache.set(k, t))
           .catch(() => {}),
       ),

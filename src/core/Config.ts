@@ -56,6 +56,22 @@ export const PTM = 30;
 export const ASSET_BASE = "assets";
 
 /**
+ * Cache-busting stamp appended to every asset URL as `?v=`.
+ *
+ * The JS bundles are content-hashed by Vite, so a new build gets a new filename
+ * and clients pick it up immediately. Asset paths are STABLE by design --
+ * `assets/arms-r2/gun/rocket.png` is the same URL forever -- so a re-baked sheet
+ * is invisible behind any cache until it expires. Cloudflare fronts this site
+ * with a 4-hour browser TTL by default, which is how a fixed art bug can stay
+ * broken for hours after a correct deploy.
+ *
+ * Injected by vite.config.ts at build time; "dev" while running the dev server,
+ * where Vite already revalidates.
+ */
+export const ASSET_V: string =
+  typeof __ASSET_V__ === "string" ? __ASSET_V__ : "dev";
+
+/**
  * Camera zoom: how much the arena is scaled up on screen. >1 shows LESS of the
  * world (a smaller field of view). Zoom is a uniform scale, so aim angles are
  * unaffected.
@@ -69,3 +85,6 @@ export const ASSET_BASE = "assets";
  * against this same native basis, so they no longer have to cancel a zoom out.
  */
 export const CAMERA_ZOOM = 1;
+
+/** Injected by vite.config.ts `define`. */
+declare const __ASSET_V__: string | undefined;

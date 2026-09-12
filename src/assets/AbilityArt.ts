@@ -1,5 +1,5 @@
 import { Assets, Texture } from "pixi.js";
-import { ASSET_BASE } from "../core/Config";
+import { ASSET_BASE, ASSET_V } from "../core/Config";
 import ABILITY_RIG from "./abilityRig.json";
 
 /**
@@ -35,7 +35,7 @@ export const AbilityArt = {
   async load(): Promise<void> {
     await Promise.all(
       rig.frames.map((f) =>
-        Assets.load<Texture>(`${ASSET_BASE}/ability/${f}.png`)
+        Assets.load<Texture>(`${ASSET_BASE}/ability/${f}.png?v=${ASSET_V}`)
           .then((t) => void cache.set(f, t))
           .catch(() => {}),
       ),

@@ -1,5 +1,5 @@
 import { Assets, Rectangle, Texture } from "pixi.js";
-import { ASSET_BASE } from "../core/Config";
+import { ASSET_BASE, ASSET_V } from "../core/Config";
 import rig from "./propRig.json";
 
 /**
@@ -121,7 +121,7 @@ export const PropArt = {
         const key = `${prop}#${page}`;
         if (pages.has(key)) return;
         jobs.push(
-          Assets.load<Texture>(`${ASSET_BASE}/props/${file}`)
+          Assets.load<Texture>(`${ASSET_BASE}/props/${file}?v=${ASSET_V}`)
             .then((t) => void pages.set(key, t))
             .catch(() => {}),
         );

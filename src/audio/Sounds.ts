@@ -1,5 +1,5 @@
 import { SD } from "../state/SD";
-import { ASSET_BASE, GAME_HEIGHT, GAME_WIDTH } from "../core/Config";
+import { ASSET_BASE, GAME_HEIGHT, GAME_WIDTH, ASSET_V } from "../core/Config";
 
 /**
  * Audio system. Ported from SoundHandler.as onto the Web Audio API.
@@ -301,7 +301,7 @@ class SoundManager {
     await Promise.all(
       keys.map(async (key) => {
         try {
-          const res = await fetch(`${ASSET_BASE}/sounds/${MANIFEST[key]}`);
+          const res = await fetch(`${ASSET_BASE}/sounds/${MANIFEST[key]}?v=${ASSET_V}`);
           const arr = await res.arrayBuffer();
           this.buffers.set(key, await ctx.decodeAudioData(arr));
         } catch {

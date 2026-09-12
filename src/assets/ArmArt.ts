@@ -1,5 +1,5 @@
 import { Assets, Rectangle, Texture } from "pixi.js";
-import { ASSET_BASE } from "../core/Config";
+import { ASSET_BASE, ASSET_V } from "../core/Config";
 import META from "./armMeta.json";
 
 /**
@@ -40,7 +40,7 @@ function key(id: string, frame: number): string {
   return `${id}:${frame}`;
 }
 function url(id: string, frame: number): string {
-  return `${ASSET_BASE}/arms-anim/${id}/${frame}.png`;
+  return `${ASSET_BASE}/arms-anim/${id}/${frame}.png?v=${ASSET_V}`;
 }
 
 export const ArmArt = {

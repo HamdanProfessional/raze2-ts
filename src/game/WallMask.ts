@@ -1,5 +1,5 @@
 import { Texture } from "pixi.js";
-import { ASSET_BASE } from "../core/Config";
+import { ASSET_BASE, ASSET_V } from "../core/Config";
 import RAZE2_MAPS from "../assets/raze2maps.json";
 
 /**
@@ -320,8 +320,8 @@ const frames = new Map<string, WallMask[]>();
 /** Decode one mask plus the special layer that sits alongside it by convention. */
 function loadPair(mask: string): Promise<WallMask> {
   const special = mask.replace(/_mask\.png$/, "_special.png");
-  return WallMask.fromUrl(`${ASSET_BASE}/levels/${mask}`).then(async (wm) => {
-    await wm.loadSpecial(`${ASSET_BASE}/levels/${special}`);
+  return WallMask.fromUrl(`${ASSET_BASE}/levels/${mask}?v=${ASSET_V}`).then(async (wm) => {
+    await wm.loadSpecial(`${ASSET_BASE}/levels/${special}?v=${ASSET_V}`);
     return wm;
   });
 }

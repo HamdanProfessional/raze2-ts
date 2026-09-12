@@ -1,5 +1,5 @@
 import { Assets, Texture } from "pixi.js";
-import { ASSET_BASE } from "../core/Config";
+import { ASSET_BASE, ASSET_V } from "../core/Config";
 
 /**
  * Front-end (menu/title/play) background art.
@@ -28,11 +28,11 @@ const BUTTON_FILES: Record<string, string> = {
 const cache = new Map<string, Texture>();
 
 function url(file: string): string {
-  return `${ASSET_BASE}/ui/${file}`;
+  return `${ASSET_BASE}/ui/${file}?v=${ASSET_V}`;
 }
 
 function buttonUrl(file: string): string {
-  return `${ASSET_BASE}/buttons/${file}`;
+  return `${ASSET_BASE}/buttons/${file}?v=${ASSET_V}`;
 }
 
 export const UiArt = {

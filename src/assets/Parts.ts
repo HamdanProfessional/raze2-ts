@@ -1,5 +1,5 @@
 import { Assets, Sprite, Texture } from "pixi.js";
-import { ASSET_BASE } from "../core/Config";
+import { ASSET_BASE, ASSET_V } from "../core/Config";
 import { setPartArtProvider, type PartKind, type PartSpec } from "../physics/RdContainer";
 
 /**
@@ -34,7 +34,7 @@ const cache = new Map<string, Texture>();
 let ready = false;
 
 function url(kind: PartKind, frame: number): string {
-  return `${ASSET_BASE}/parts/${kind}/${frame}.png`;
+  return `${ASSET_BASE}/parts/${kind}/${frame}.png?v=${ASSET_V}`;
 }
 function key(kind: PartKind, frame: number): string {
   return `${kind}:${frame}`;

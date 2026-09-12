@@ -5,6 +5,7 @@ import { SD } from "../state/SD";
 import { Sound } from "../audio/Sounds";
 import { UiArt } from "../assets/UiArt";
 import { ArmArt } from "../assets/ArmArt";
+import { ArmAnim } from "../assets/ArmAnim";
 import { SkinArt } from "../assets/SkinArt";
 import {
   RAZE2_WEAPONS, RAZE2_SKINS,
@@ -510,13 +511,19 @@ export class ArmoryBrowseScreen extends Screen {
       .stroke({ color: accent, width: 1, alpha: owned ? 0.3 : 0.15 });
     c.addChild(plate);
 
-    const icon = ArmArt.getIcon(w.id);
+    const icon = ArmAnim.gunIcon(w.id) ?? ArmArt.getIcon(w.id);
     if (icon) {
       const s = new Sprite(icon);
-      // A shared 2x, only reduced for the few icons that would overflow the
-      // plate (shotgun is the widest at 81px, sawgun the tallest at 31). Fitting
-      // each icon to the plate instead would blow a pistol up to a rifle's size.
-      s.scale.set(Math.min(2, (leftW - 20) / (icon.width || 1), (plateH - 12) / (icon.height || 1)));
+      // A shared 2x of the weapon's LOGICAL size, only reduced for the few icons
+      // that would overflow the plate. Fitting each icon to the plate instead
+      // would blow a pistol up to a rifle's size.
+      //
+      // `ArmAnim.scale` converts the supersampled sheet back to logical px, so
+      // the gun stays the size it has always been on screen while carrying 1.5x
+      // the texels. The two fit terms are already logical-over-texture, so they
+      // need no such conversion.
+      const cap = 2 * ArmAnim.scale;
+      s.scale.set(Math.min(cap, (leftW - 20) / (icon.width || 1), (plateH - 12) / (icon.height || 1)));
       s.anchor.set(0.5);
       s.x = PAD + leftW / 2; s.y = plateY + plateH / 2;
       s.alpha = owned ? 1 : 0.4;
