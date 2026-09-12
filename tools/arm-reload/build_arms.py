@@ -117,7 +117,7 @@ if "--guns" in args:
 QUANT = "--no-quant" not in args
 SCALE = 1
 if "--scale" in args:
-    SCALE = max(1, int(args[args.index("--scale") + 1]))
+    SCALE = max(1.0, float(args[args.index("--scale") + 1]))
 
 weapons = json.load(open(os.path.join(ROOT, "src", "assets", "raze2", "weapons.json")))
 skins = json.load(open(os.path.join(ROOT, "src", "assets", "raze2", "skins.json")))
@@ -227,11 +227,19 @@ OX, OY = -minx + MARGIN, -miny + MARGIN
 print(f"cell {CW}x{CH}  shoulder ({OX:.2f},{OY:.2f}) -> anchor ({OX/CW:.4f},{OY/CH:.4f})")
 
 MAXCELLS = max(len(band_frames(p)) for p in BANDS) * len(BAND_ORDER)
-COLS = max(1, math.ceil(math.sqrt(MAXCELLS * CH / CW)))
-while math.ceil(MAXCELLS / COLS) * CH > 4096 or COLS * CW > 4096:
+# Pack against the SUPERSAMPLED cell, because that is what is written to disk and
+# handed to the GPU. Checking the logical size instead silently emitted 5400px
+# sheets at --scale 2, which exceed MAX_TEXTURE_SIZE on any 4096-limited GPU --
+# the texture then fails to upload and the arms simply do not draw.
+SW_, SH_ = CW * SCALE, CH * SCALE
+COLS = max(1, math.ceil(math.sqrt(MAXCELLS * SH_ / SW_)))
+while math.ceil(MAXCELLS / COLS) * SH_ > 4096 or COLS * SW_ > 4096:
     COLS += 1
-    if COLS * CW > 4096:
-        raise SystemExit(f"cannot fit {MAXCELLS} cells of {CW}x{CH} under 4096px")
+    if COLS * SW_ > 4096:
+        raise SystemExit(
+            f"--scale {SCALE:g} cannot fit {MAXCELLS} cells of "
+            f"{SW_:g}x{SH_:g} under 4096px. Largest workable factor is ~1.5; "
+            f"going higher needs the sheet split across pages.")
 print(f"cols {COLS}, longest band {MAXCELLS // len(BAND_ORDER)} frames "
       f"x {len(BAND_ORDER)} bands = {MAXCELLS} cells")
 
@@ -340,9 +348,9 @@ json.dump({
     # multiplier that takes the sprite back to its logical on-screen size, the
     # same convention skinAnim.json uses. `anchor` is normalised, so it is
     # resolution-independent and does not change with the supersample factor.
-    "cell": [CW * SCALE, CH * SCALE],
+    "cell": [round(CW * SCALE), round(CH * SCALE)],
     "cols": COLS,
-    "scale": round(1.0 / SCALE, 6),
+    "scale": round(1.0 / SCALE, 12),
     "supersample": SCALE,
     "anchor": [round(OX / CW, 5), round(OY / CH, 5)],
     "bands": {b: i for i, b in enumerate(BAND_ORDER)},

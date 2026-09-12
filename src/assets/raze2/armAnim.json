@@ -1,11 +1,11 @@
 {
  "cell": [
-  300,
-  356
+  225,
+  267
  ],
  "cols": 18,
- "scale": 0.5,
- "supersample": 2,
+ "scale": 0.666666666667,
+ "supersample": 1.5,
  "anchor": [
   0.1856,
   0.44901
