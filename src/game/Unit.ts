@@ -2586,16 +2586,10 @@ export class Unit {
         killerIsPlayer: !!killer.human,
         victimIsPlayer: this.human,
       });
-      // World-space kill card at the body — only for the human's own kills,
-      // otherwise a busy arena covers itself in popups.
-      if (killer.human) {
-        this.game.addKillPopup?.(
-          this.x,
-          this.y - 70 * this.bodyScale(),
-          killer.gun.curGun.id,
-          !!info.headShot,
-        );
-      }
+      // No weapon-glyph kill card here. It was a port invention and it landed on
+      // the same spot, at the same moment, as the kill-bonus popup below, which
+      // already names the bonus ("Headshot!") and is the one the original has
+      // (`KillPoints.as:245`, `hud.addPoints`). Two labels over one corpse.
       if (info.headShot) hud?.announce?.("HEADSHOT!", 0xffcc33);
 
       // Raze 2 kill-bonus economy: award credits (base + the first three

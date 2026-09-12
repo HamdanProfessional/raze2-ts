@@ -1472,11 +1472,6 @@ export class GameScreen extends Screen {
     this.pushFx(createEffect("sparkRain", color), x, y);
   }
 
-  /** A rising kill card at the victim's body. Player kills only. */
-  addKillPopup(x: number, y: number, weaponId: string, headshot: boolean): void {
-    this.pushFx(Fx.addKillPopup(weaponId, headshot), x, y);
-  }
-
   /** Floating kill-bonus popup (bonus names + credits) at a kill location. */
   addBonusPopup(x: number, y: number, lines: string[], points: number): void {
     this.pushFx(Fx.addBonusPopup(lines, points), x, y);

@@ -556,53 +556,6 @@ function critFlash(): FxObject {
   };
 }
 
-/**
- * Kill announcement: a small card that rises off the victim and fades, with
- * the killing weapon's silhouette next to the word. Shown in world space at
- * the body so the player's eye is already looking at it.
- */
-function killPopup(weaponId: string, headshot: boolean): FxObject {
-  const maxAge = 52;
-  const fade = 16;
-  let age = 0;
-  const view = new Container();
-  // GameScreen owns `view`'s position (it drops the effect at the body), so the
-  // rise animates an inner container instead of fighting it.
-  const inner = new Container();
-  view.addChild(inner);
-  const g = new Graphics();
-  const label = new Text({
-    text: headshot ? "HEADSHOT" : (WEAPONS[weaponId]?.msg ?? "KILL").toUpperCase(),
-    style: new TextStyle({
-      fill: headshot ? 0xffcc33 : 0xffffff,
-      fontFamily: "monospace",
-      fontSize: 11,
-      fontWeight: "bold",
-      letterSpacing: 1,
-    }),
-  });
-  label.anchor.set(0, 0.5);
-  label.x = 12;
-  inner.addChild(g, label);
-  return {
-    view,
-    enterFrame(): boolean {
-      age++;
-      // Rises fast then eases to a stop, so it settles where it can be read.
-      const rise = 26 * (1 - Math.pow(1 - Math.min(1, age / 22), 3));
-      inner.y = -rise;
-      inner.alpha = age > maxAge - fade ? Math.max(0, (maxAge - age) / fade) : 1;
-      // Draw the weapon glyph once; it does not animate.
-      if (age === 1) {
-        const col = headshot ? 0xffcc33 : 0xdddddd;
-        g.rect(-16, -3, 20, 4).fill({ color: col });
-        g.rect(-4, 0, 5, 7).fill({ color: col });
-      }
-      return age >= maxAge;
-    },
-  };
-}
-
 /** Teleport-in flash used when a unit spawns. */
 function spawnFlash(): FxObject {
   const maxAge = 16;
@@ -844,15 +797,9 @@ export const emitSmoke = smokePuff;
 export const ejectShell = shellCasing;
 
 /**
- * A rising "X killed Y" card at the victim's body, with the killing weapon's
- * silhouette. Shown only for the human player's kills.
- */
-export const addKillPopup = killPopup;
-
-/**
  * Floating kill-bonus popup: a stack of bonus names (Headshot!/Juggerkill!/…)
  * over a "+N" credits line, rising and fading at the kill location. Positioned
- * by the caller like killPopup.
+ * by the caller, in world space at the kill.
  */
 function bonusPopup(lines: string[], points: number): FxObject {
   const maxAge = 70;
