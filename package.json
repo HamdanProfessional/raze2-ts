@@ -8,6 +8,7 @@
     "dev": "vite",
     "server": "node --watch server/index.ts",
     "server:once": "node server/index.ts",
+    "server:bundle": "esbuild server/index.ts --bundle --format=esm --platform=node --packages=external --outfile=dist-server/server.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
@@ -15,6 +16,7 @@
     "smoke:ui": "esbuild test/uismoke.ts --bundle --format=esm --platform=node --alias:pixi.js=./test/pixi-stub.mjs --outfile=test/_uismoke.mjs && node test/_uismoke.mjs",
     "smoke:layout": "esbuild test/layoutcheck.ts --bundle --format=esm --platform=node --alias:pixi.js=./test/pixi-stub.mjs --outfile=test/_layoutcheck.mjs && node test/_layoutcheck.mjs",
     "smoke:anim": "esbuild test/animcheck.ts --bundle --format=esm --platform=node --outfile=test/_animcheck.mjs && node test/_animcheck.mjs",
+    "smoke:relay": "esbuild test/relaycheck.mjs --bundle --format=esm --platform=node --packages=external --outfile=test/_relaycheck.mjs && node test/_relaycheck.mjs",
     "smoke:camp": "esbuild test/campcheck.ts --bundle --format=esm --platform=node --alias:pixi.js=./test/pixi-stub.mjs --outfile=test/_campcheck.mjs && node test/_campcheck.mjs"
   },
   "dependencies": {

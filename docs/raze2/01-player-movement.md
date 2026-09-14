@@ -336,6 +336,16 @@ Compared against `C:\Users\Hamdan\Desktop\mc\raze\raze-ts\src\game\Unit.ts`
   though implemented completely differently.
 
 ### Present but wrong / incomplete
+
+> **Corrected 2026-09-14 — this section is stale; the port now matches the source.**
+> `Unit.ts` carries the authored constants verbatim (`acc 2.1`, `brake 1.7`,
+> `crouchBrake 0.5`, `airAcc 1.5`, `airBrake 0.4`, `max 11`; jump `-13` plus the
+> one-time `yJumpBoost` 6px hop), the over-speed ×2.5 brake, separate crouch brake
+> and the terrain surface-modifier table (`WallMask.SURFACE_TABLE` →
+> `modSpeed`/`modMax`/`modBrake`/`modJump`/`modGrav`/`modSlide`/`modMove`, mud/ice/
+> snow/sand/low-grav/water/toxic/conveyor), the `xVelSlide` slope component, and the
+> `±17` four-band wall probe are all implemented. The bullets below describe the
+> pre-rebuild controller and are kept for history only.
 - **Horizontal constants are scaled down and not proportional to the
   original.** Port: `acc=1.61, brake=1.61, airAcc=1.12, airBrake=0.35,
   max=8.4` (`Unit.ts:953-957`, explicitly commented "tuned 30% slower than
@@ -382,6 +392,12 @@ Compared against `C:\Users\Hamdan\Desktop\mc\raze\raze-ts\src\game\Unit.ts`
   half-pixel settle behavior of the original.
 
 ### Entirely missing
+
+> **Corrected 2026-09-14 — all four items below are now implemented**: the terrain
+> modifier table (`WallMask.ts:58-87` + `Unit.ts` consumption), `xVelSlide`
+> (`Unit.ts` `modSlide` ground-lean fold), `yJumpBoost` (`Unit.doJump`), and the
+> shell-matching double-jump spin gate. The bullets are historical.
+
 - **Terrain surface-modifier table (§7)**: no mud/snow/sand/water/toxic/
   conveyor-belt effects on movement anywhere in `raze-ts` (`grep` across
   `src/game` found no surface-driven `modSpeed`/`modSlide`/`modMove`

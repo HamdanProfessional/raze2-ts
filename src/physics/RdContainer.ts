@@ -1,55 +1,31 @@
-import { Container, Graphics } from "pixi.js";
+import { Container, Graphics, Sprite } from "pixi.js";
+import { RagdollArt, type PartKind } from "../assets/RagdollArt";
+import { AbilityArt } from "../assets/AbilityArt";
+
+export type { PartKind };
 
 /**
- * A single ragdoll body-part's display object. Ported from RdContainer.as (a
- * Sprite that held a costume MovieClip and could re-select its frame).
+ * One ragdoll body-part's display object. Ported from the `userData` Sprite
+ * `PhysActor.createPart` hangs off each b2Body.
  *
- * The physics engine sets this container's x/y/rotation each frame from the
- * body. The actual limb art lives as a child, positioned by the art provider.
- * Until the real sprite pipeline is wired up (task 7), a placeholder Graphic
- * sized to exactly match the physics fixture is drawn instead, so the ragdoll
- * is visible and debuggable.
+ * `PhysWorld.EnterFrame` writes `sprite.x/y = body.GetPosition() * 30` and
+ * `sprite.rotation = body.GetAngle()`, so this container's origin IS the part's
+ * registration point and everything inside is positioned relative to it. The
+ * art sprite carries that anchor; nothing here offsets it.
  */
 
-export type PartKind =
-  | "body"
-  | "head"
-  | "upperArm"
-  | "lowerArm"
-  | "hand"
-  | "upperLeg"
-  | "lowerLeg"
-  | "foot";
-
-/** Everything needed to draw one part, in pixel space. */
+/** Everything needed to draw one part. */
 export interface PartSpec {
   kind: PartKind;
-  /** Costume frame group (unit.costume.body/head/legs). */
-  costume: number;
-  /** Full width (box) or diameter (circle), in px, already scaled. */
-  widthPx: number;
-  /** Full height in px (== widthPx for circles), already scaled. */
-  heightPx: number;
-  isCircle: boolean;
-  /** Shape centre offset from the body origin, in px (already scaled/flipped). */
-  offsetXPx: number;
-  offsetYPx: number;
-  scale: number;
+  /** `unit.MC.curSkin` — ONE index shared by every part of a costume. */
+  skinFrame: number;
+  /** ±1, mirroring `clip.scaleX = flip`. */
   flip: number;
+  /** Back-slot sprite name, torso only (`unit.ability.sprite`). */
+  ability?: string;
 }
 
-/**
- * Injected by the asset pipeline to supply real limb sprites. Returns a
- * display object to add as the part's art, or null to fall back to placeholder.
- */
-export type PartArtProvider = (spec: PartSpec) => Container | null;
-
-let artProvider: PartArtProvider = () => null;
-export function setPartArtProvider(p: PartArtProvider): void {
-  artProvider = p;
-}
-
-// Placeholder colours per part kind (temporary art only).
+/** Fallback block colours, used only if the strips failed to load. */
 const PLACEHOLDER_COLORS: Record<PartKind, number> = {
   body: 0x3a4a5a,
   head: 0xd8b090,
@@ -62,36 +38,43 @@ const PLACEHOLDER_COLORS: Record<PartKind, number> = {
 };
 
 export class RdContainer extends Container {
-  readonly costume: number;
+  readonly kind: PartKind;
+  /** The costume index this part was built at — one value shared by the rig. */
+  readonly skinFrame: number;
 
   constructor(spec: PartSpec) {
     super();
-    this.costume = spec.costume;
+    this.kind = spec.kind;
+    this.skinFrame = spec.skinFrame;
 
-    const art = artProvider(spec);
-    if (art) {
-      this.addChild(art);
-    } else {
-      this.addChild(this.buildPlaceholder(spec));
-    }
+    // The back slot is a child of the torso clip in the SWF (`PhysBody.ability`),
+    // so it rides the torso's rotation for free by being a child here too. Added
+    // first: the pack sits behind the body.
+    if (spec.kind === "body" && spec.ability) this.addAbility(spec.ability, spec.flip);
+
+    const art = RagdollArt.sprite(spec.kind, spec.skinFrame, spec.flip);
+    this.addChild(art ?? this.buildPlaceholder(spec));
+  }
+
+  private addAbility(name: string, flip: number): void {
+    const tex = AbilityArt.getTexture(name);
+    if (!tex) return;
+    const [ax, ay] = AbilityArt.anchor();
+    const [ox, oy] = RagdollArt.abilityOffset();
+    const sp = new Sprite(tex);
+    sp.anchor.set(ax, ay);
+    sp.scale.x = flip < 0 ? -1 : 1;
+    sp.x = ox * (flip < 0 ? -1 : 1);
+    sp.y = oy;
+    this.addChild(sp);
   }
 
   private buildPlaceholder(spec: PartSpec): Graphics {
+    const [w, h] = RagdollArt.artSize(spec.kind, spec.skinFrame);
     const g = new Graphics();
-    const color = PLACEHOLDER_COLORS[spec.kind];
-    if (spec.isCircle) {
-      const r = spec.widthPx / 2;
-      g.circle(spec.offsetXPx, spec.offsetYPx, r);
-    } else {
-      g.rect(
-        spec.offsetXPx - spec.widthPx / 2,
-        spec.offsetYPx - spec.heightPx / 2,
-        spec.widthPx,
-        spec.heightPx,
-      );
-    }
-    g.fill({ color, alpha: 0.95 });
-    g.stroke({ color: 0x000000, width: 1, alpha: 0.4 });
+    if (spec.kind === "head" || spec.kind === "hand") g.circle(0, 0, w / 2);
+    else g.rect(-w / 2, -h / 2, w, h);
+    g.fill({ color: PLACEHOLDER_COLORS[spec.kind], alpha: 0.95 });
     return g;
   }
 }

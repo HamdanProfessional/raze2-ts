@@ -457,18 +457,19 @@ File: `src/game/AI.ts` (358 lines) + `src/game/Personality.ts` (109 lines).
   not a port gap, but should be flagged as **behavior not present in the source game**.
 
 ### Wrong / incomplete vs. source
-- **Aim-at-player-by-default is missing.** The single biggest behavioral divergence:
-  Raze 2's default (non-campaign) bots aim at the **human player specifically**
-  (`aimX/aimY` lerp 0.8 toward `game.player`, `AI.as:377-383`) regardless of `target`,
-  and only use genuine per-unit target aiming when a campaign flag (`matchInfo.extra.aimPlayer`)
-  is set. The port's `combat()` always aims at `this.target` (`AI.ts:309-314`), i.e. it
-  implements the *campaign* branch as if it were the default. In FFA/team matches with
-  multiple bots this makes an important qualitative difference (original bots basically
-  only genuinely fight the human in most match configs — bot-vs-bot combat still uses
-  `target` for the *shoot gate* but always visually/mechanically aims at the player).
-  This may be an intentional design change for a "real" multi-bot skirmish experience
-  rather than a bug, but it is a deviation worth calling out explicitly since it changes
-  core combat feel.
+- **Aim-at-player-by-default — deliberate, documented deviation (updated 2026-09-14).**
+  This doc reads `AI.as:365-383` as "every non-campaign bot aims at the human regardless
+  of target". The port's `aimStep()` (`AI.ts:703-739`) implements the opposite: the
+  player-tracking lerp is gated on `extra.aimPlayer` only, and every other bot aims at
+  the unit it actually acquired. The port's own comment explains why: its earlier reading
+  `(!campaign || extra.aimPlayer)` made every bot *validate* shots against its real target
+  in `fireStep` while *aiming* along a line to the player, so bots fired into walls
+  whenever the player was not on that line ("bots shoot at nothing"). If the intended
+  original behaviour is wanted later, flip the gate in `aimStep` and keep the two paths
+  consistent.
+- **Bot aim-at-player divergence in multi-bot matches.** Consequence of the above: the
+  port's bots genuinely fight each other in FFA/team matches; the doc's reading of the
+  source is that they mostly only track the human. Design decision, not a data gap.
 - **No line-of-sight raycast for target acquisition beyond the port's `gun.checkUnitHit`.**
   Need to verify `checkUnitHit`'s implementation (not read in this pass) actually performs
   the stepped wall-hit-test the original does (`AI.as:419-446`, 20-unit-step `mov.hitTest`
@@ -510,10 +511,17 @@ File: `src/game/AI.ts` (358 lines) + `src/game/Personality.ts` (109 lines).
   flagging here that the source-fidelity docs should make the cross-game origin explicit).
 - **Random-among-shortest-N CTF pathfinding** (`pathFind`/`searchNode`/`NodeWaypointPath`,
   §7.3) has no visible port equivalent (routing appears delegated to `objectives.ctfGoal`,
-  not reviewed in this pass).
+  not reviewed in this pass). *(Updated 2026-09-14: `AI.ts` now has a bounded-DFS
+  `pathFind`/`ctfPath` route cache — re-audit before trusting this row.)*
 - **wpTimer stuck-recovery** (4s timeout → `getClosestWp()`, `AI.as:340-343`) — no
-  equivalent stuck-detection visible in `AI.ts`.
-- **Bot name list** (`AI_NAMES`/`AI_TAGS` in `AI.ts:32-38`) is an entirely different,
-  much shorter set than Raze 2's `botnames` (`MatchSettings.as:143-149`) — reinvented
-  rather than ported verbatim; not a bug, but if verbatim Raze 2 names/tags are desired
-  for authenticity this list should be replaced.
+  equivalent stuck-detection visible in `AI.ts`. *(Updated 2026-09-14: implemented —
+  `wpTimer` with the 4s resync is in `AI.ts`.)*
+- **Bot name list — now authentic (2026-09-14).** `AI_NAMES` is the verbatim flattened
+  `MatchSettings.botnames` (`MatchSettings.as:143-149`, including the source's duplicate
+  `"Mr.Mau5"`); the invented `AI_TAGS` prefixes are gone, and the constructor rerolls
+  until the draw is unique among live units, matching the source's `while(!_loc4_)`
+  loop. The Raze 1 personality chatter remains a documented port import.
+- **Proactive ability use — implemented (2026-09-14).** `AI.ts` rolls the documented
+  triggers (teleport 2%, cloak 10%, mine 10% no-target-gated, sword/grenade range-gated)
+  through `activateAbility` with the energy gate; re-audit before trusting the old
+  "missing feature" note.

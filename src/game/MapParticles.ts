@@ -1,7 +1,8 @@
-import { Graphics } from "pixi.js";
+import { Container, Graphics, Sprite } from "pixi.js";
 import { GAME_WIDTH, GAME_HEIGHT } from "../core/Config";
 import { UT } from "../core/UT";
 import { Quality } from "../state/Quality";
+import { FxArt, type FxDef } from "../assets/FxArt";
 import type { WallMask } from "./WallMask";
 import { EMITTERS, type Emitter, type Spawn } from "./mapEmitters";
 
@@ -26,10 +27,12 @@ import { EMITTERS, type Emitter, type Spawn } from "./mapEmitters";
  *    it is the loop bound on the waterfalls, the modulus on the snowfall and
  *    leaf rate, and at 0 the rising motes stop entirely.
  *
- * The original drew each particle as a pre-baked bitmap frame through
- * `BH.getBitAniStats` / `bitscreen.paint`. That atlas is not extracted yet, so
- * the shapes here are drawn procedurally to match each kind's colour and size.
- * Everything goes into one `Graphics`, cleared and repainted per frame.
+ * The art comes from the baked `BH` atlas (`FxArt`, entries `fairy`/`water`/
+ * `ember`/`leaves`/`snow_fall`): every `Particle` paints a named clip's sub-
+ * animation at a rotation rolled once per spawn, exactly as
+ * `BitScreen.paint(x, y, true, name, sub, frame)` does. Only sprites with no
+ * baked entry (the unused `shell`), or a headless run where the atlas has not
+ * decoded, fall back to the procedural shapes.
  */
 
 /** The eight motions in `Particle.EnterFrame`'s switch. */
@@ -42,6 +45,21 @@ export type Behave =
   | "leaf"
   | "raise"
   | "fish";
+
+/** Art clip + sub-animation per behaviour, from the `createParticle` calls in
+ *  `Stats_MapParticles.as`: the fairies and both the fish and rising motes are
+ *  the `fairy` clip ("fish"/"idle" subs), the sparks are `ember`, the leaves
+ *  are `leaves` and the snowfall `snow_fall`. */
+const ART: Record<Behave, { name: string; sub: string }> = {
+  fairy: { name: "fairy", sub: "idle" },
+  fish: { name: "fairy", sub: "fish" },
+  water: { name: "water", sub: "idle" },
+  spark: { name: "ember", sub: "idle" },
+  leaf: { name: "leaves", sub: "leaf1" },
+  snow: { name: "snow_fall", sub: "idle" },
+  raise: { name: "fairy", sub: "idle" },
+  shell: { name: "shell", sub: "idle" },
+};
 
 /** `Game.createParticle` only spawns within this much of the view. */
 const SPAWN_MARGIN = 300;
@@ -72,14 +90,25 @@ class Particle {
   hitCount = 0;
   /** Frame within the kind's animation; `held` pins it (the `frame` argument). */
   frame: number;
-  private held: boolean;
+  held: boolean;
+
+  // --- baked BH clip (BitScreen.paint's name/sub/frame) ---------------------
+  artName = "";
+  artSub = "idle";
+  artDef: FxDef | null = null;
+  /** First cell of this particle's sub-animation within a rotation's frames. */
+  subBase = 0;
+  /** Frames in that sub-animation, for the non-held wrap. */
+  subFrames = 1;
+  /** Rotation variant, rolled once here like `UT.irand(0, stats.rotAmt - 1)`. */
+  rot = 0;
 
   constructor(
     public x: number,
     public y: number,
     public behave: Behave,
     public extra: Extra,
-    /** Art variant, e.g. `leaf3`. Kept for the sprite atlas port. */
+    /** Art variant, e.g. `leaf3`. */
     public sub: string,
     frame: number,
   ) {
@@ -116,11 +145,37 @@ class Particle {
         this.xSpd = !(this.ySpd * (extra.xspd ?? 0)) ? 0 : (extra.xspd ?? 0);
         break;
     }
+
+    const art = ART[behave];
+    this.artName = art.name;
+    this.artSub = behave === "leaf" ? sub : art.sub;
+    this.artDef = FxArt.def(this.artName);
+    if (this.artDef) {
+      this.rot = (Math.random() * this.artDef.rotAmt) | 0;
+      const subs = this.artDef.subs;
+      if (subs) {
+        let base = 0;
+        for (const [key, n] of Object.entries(subs)) {
+          if (key === this.artSub) {
+            this.subBase = base;
+            this.subFrames = n;
+            break;
+          }
+          base += n;
+        }
+      } else {
+        this.subFrames = this.artDef.frames;
+      }
+    }
   }
 }
 
 export class MapParticles {
-  readonly view = new Graphics();
+  readonly view = new Container();
+  /** Procedural shapes, used only for particles with no baked entry. */
+  private fallbackG = new Graphics();
+  /** One pooled sprite per live particle; repositioned/retextured each frame. */
+  private sprites: Sprite[] = [];
   private ps: Particle[] = [];
   private fc = 0;
   private emitter: Emitter;
@@ -135,6 +190,7 @@ export class MapParticles {
     private mask: WallMask | null,
     private splash: (x: number, y: number) => void,
   ) {
+    this.view.addChild(this.fallbackG);
     this.emitter = EMITTERS[map] ?? { init: [], frame: () => [] };
     for (const s of this.emitter.init) this.spawn(s, true);
   }
@@ -172,8 +228,10 @@ export class MapParticles {
       this.spawn(s, s.force ?? false, cam);
     }
     for (const p of this.ps) this.advance(p);
-    if (this.ps.some((p) => p.remove)) this.ps = this.ps.filter((p) => !p.remove);
+    // Paint before the cull: the original sets `remove` inside `EnterFrame`
+    // *after* the paint call, so a droplet's final splash frame is drawn.
     this.draw();
+    if (this.ps.some((p) => p.remove)) this.ps = this.ps.filter((p) => !p.remove);
   }
 
   /** `Particle.EnterFrame` — one case per behaviour, in the original's order. */
@@ -265,68 +323,123 @@ export class MapParticles {
         p.frame = xMoveToRot(p.extra.rot1!, 1) > 0 ? 1 : 2;
         break;
     }
+
+    // `if(!holdFrame) { frame++; if(frame > stats.frames) frame = 1; }` — the
+    // sub-animation loops; it never ends the particle.
+    if (!p.held) {
+      p.frame++;
+      if (p.frame > p.subFrames) p.frame = 1;
+    }
+  }
+
+  /**
+   * `BitScreen.paint`'s cell selection: the sub-animation's own frames, offset
+   * into this spawn's rotation block, with the splash/trail frames the water
+   * and spark cases compute (`uint(hitCount / 10) + 2`).
+   */
+  private cellIndex(p: Particle): number {
+    const def = p.artDef!;
+    let frame = p.frame;
+    if ((p.behave === "water" || p.behave === "spark") && p.hitCount) {
+      frame = Math.trunc(p.hitCount / 10) + 2;
+    }
+    const local = Math.max(0, Math.min(p.subFrames - 1, frame - 1));
+    return p.rot * def.frames + p.subBase + local;
   }
 
   private draw(): void {
-    const g = this.view;
+    const g = this.fallbackG;
     g.clear();
-    for (const p of this.ps) {
-      switch (p.behave) {
-        case "fairy":
-          g.circle(p.x, p.y, 3).fill({ color: 0xd8ffa0, alpha: 0.28 });
-          g.circle(p.x, p.y, 1.2).fill({ color: 0xf6ffd8, alpha: 0.95 });
-          break;
-        case "raise":
-          // Fades as it climbs, so a column thins out rather than cutting off.
-          g.circle(p.x, p.y, 1.6).fill({
-            color: 0xcfe6ff,
-            alpha: 0.5 * (1 - p.fc / RAISE_LIFE),
+
+    for (let i = 0; i < this.ps.length; i++) {
+      const p = this.ps[i];
+      const idx = p.artDef ? this.cellIndex(p) : 0;
+      const cell = p.artDef && FxArt.loaded ? p.artDef.cells[idx] : null;
+      const tex = p.artDef && FxArt.loaded ? FxArt.cell(p.artName, idx) : null;
+
+      let spr = this.sprites[i];
+      if (!spr) {
+        spr = new Sprite();
+        this.sprites[i] = spr;
+        this.view.addChild(spr);
+      }
+
+      if (tex && cell) {
+        spr.visible = true;
+        spr.texture = tex;
+        spr.scale.set(1 / (p.artDef?.bakeScale ?? 1));
+        // `paint(x, y, true, …)` centres the blit on (x, y); the cell's trim
+        // offset puts it back against the origin the same way.
+        spr.x = p.x + cell.lx;
+        spr.y = p.y + cell.ly;
+        // The rising motes fade as they climb, so a column thins out rather
+        // than cutting off (a readability cue over the original's constant).
+        spr.alpha = p.behave === "raise" ? 0.5 * (1 - p.fc / RAISE_LIFE) : 1;
+      } else {
+        spr.visible = false;
+        this.drawProcedural(g, p);
+      }
+    }
+    for (let i = this.ps.length; i < this.sprites.length; i++) this.sprites[i].visible = false;
+  }
+
+  /** Hand-drawn stand-ins for a run with no decoded atlas (or no baked entry). */
+  private drawProcedural(g: Graphics, p: Particle): void {
+    switch (p.behave) {
+      case "fairy":
+        g.circle(p.x, p.y, 3).fill({ color: 0xd8ffa0, alpha: 0.28 });
+        g.circle(p.x, p.y, 1.2).fill({ color: 0xf6ffd8, alpha: 0.95 });
+        break;
+      case "raise":
+        // Fades as it climbs, so a column thins out rather than cutting off.
+        g.circle(p.x, p.y, 1.6).fill({
+          color: 0xcfe6ff,
+          alpha: 0.5 * (1 - p.fc / RAISE_LIFE),
+        });
+        break;
+      case "water":
+        if (p.hitCount) {
+          const t = p.hitCount / SPLASH_LIFE;
+          g.circle(p.x, p.y, 1 + t * 4).stroke({
+            color: 0xbfe4ff, width: 1, alpha: 0.5 * (1 - t),
           });
-          break;
-        case "water":
-          if (p.hitCount) {
-            const t = p.hitCount / SPLASH_LIFE;
-            g.circle(p.x, p.y, 1 + t * 4).stroke({
-              color: 0xbfe4ff, width: 1, alpha: 0.5 * (1 - t),
-            });
-          } else {
-            g.ellipse(p.x, p.y, 1, 2).fill({ color: 0xbfe4ff, alpha: 0.75 });
-          }
-          break;
-        case "snow":
-          g.circle(p.x, p.y, 1.6).fill({ color: 0xffffff, alpha: 0.85 });
-          break;
-        case "spark":
-          if (p.hitCount) {
-            const t = p.hitCount / SPLASH_LIFE;
-            g.circle(p.x, p.y, 1.4).fill({ color: 0xff8a3d, alpha: 0.8 * (1 - t) });
-          } else {
-            g.circle(p.x, p.y, 1.2).fill({ color: 0xffc46b, alpha: 0.95 });
-          }
-          break;
-        case "shell":
-          g.rect(p.x - 1, p.y - 2, 2, 4).fill({ color: 0xd8b45a, alpha: 0.9 });
-          break;
-        case "leaf": {
-          const c = Math.cos((p.rotation * Math.PI) / 180) * 3;
-          g.ellipse(p.x, p.y, Math.max(0.6, Math.abs(c)), 2)
-            .fill({ color: 0x5e8f3a, alpha: 0.9 });
-          break;
+        } else {
+          g.ellipse(p.x, p.y, 1, 2).fill({ color: 0xbfe4ff, alpha: 0.75 });
         }
-        case "fish": {
-          const dir = p.frame === 1 ? 1 : -1;
-          g.moveTo(p.x - 4 * dir, p.y - 1.5)
-            .lineTo(p.x + 4 * dir, p.y)
-            .lineTo(p.x - 4 * dir, p.y + 1.5)
-            .fill({ color: 0x2b4a5e, alpha: 0.75 });
-          break;
+        break;
+      case "snow":
+        g.circle(p.x, p.y, 1.6).fill({ color: 0xffffff, alpha: 0.85 });
+        break;
+      case "spark":
+        if (p.hitCount) {
+          const t = p.hitCount / SPLASH_LIFE;
+          g.circle(p.x, p.y, 1.4).fill({ color: 0xff8a3d, alpha: 0.8 * (1 - t) });
+        } else {
+          g.circle(p.x, p.y, 1.2).fill({ color: 0xffc46b, alpha: 0.95 });
         }
+        break;
+      case "shell":
+        g.rect(p.x - 1, p.y - 2, 2, 4).fill({ color: 0xd8b45a, alpha: 0.9 });
+        break;
+      case "leaf": {
+        const c = Math.cos((p.rotation * Math.PI) / 180) * 3;
+        g.ellipse(p.x, p.y, Math.max(0.6, Math.abs(c)), 2)
+          .fill({ color: 0x5e8f3a, alpha: 0.9 });
+        break;
+      }
+      case "fish": {
+        const dir = p.frame === 1 ? 1 : -1;
+        g.moveTo(p.x - 4 * dir, p.y - 1.5)
+          .lineTo(p.x + 4 * dir, p.y)
+          .lineTo(p.x - 4 * dir, p.y + 1.5)
+          .fill({ color: 0x2b4a5e, alpha: 0.75 });
+        break;
       }
     }
   }
 
   destroy(): void {
-    this.view.destroy();
+    this.view.destroy({ children: true });
   }
 }
 

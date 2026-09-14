@@ -1,0 +1,10 @@
+{
+ "camelFrame": 1,
+ "file": "intro/intro.webm",
+ "fps": 30,
+ "frames": 393,
+ "h": 600,
+ "menuIntroFrame": 40,
+ "note": "Baked from DefineSprite_1846_Intro by tools/ui/bake_intro.py. Frame numbers are the SWF timeline's (1-based).",
+ "w": 800
+}

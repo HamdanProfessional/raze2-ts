@@ -1,4 +1,4 @@
-import { Container, Graphics, Text, TextStyle } from "pixi.js";
+import { Container, Graphics, Sprite, Text, TextStyle } from "pixi.js";
 import { Screen } from "../core/Screen";
 import { GAME_WIDTH, GAME_HEIGHT } from "../core/Config";
 import { SD } from "../state/SD";
@@ -55,18 +55,20 @@ const TOAST_TICKS = 90;
  * origin and height are read from the stage at layout time, so a larger window
  * keeps it centred and lets the panels grow rather than opening a gutter.
  */
-const STATS_W = 320;
-const MEDALS_W = 440;
+const MARGIN = 24;
+const GAP = 20;
 const PANEL_Y = 92;
-const BLOCK_W = STATS_W + 20 + MEDALS_W;
-
 /** Top of the awards list body, below the panel's fixed heading. */
 const LIST_Y = PANEL_Y + 52;
 /** Pixels scrolled per wheel notch / arrow press, as on the info screen. */
 const SCROLL_STEP = 42;
 
-const statsX = () => Math.round((GAME_WIDTH - BLOCK_W) / 2);
-const medalsX = () => statsX() + STATS_W + 20;
+/** The two columns split the stage (keeping the source 320:440 ratio) instead
+ *  of sitting centred inside it, so a wide window has no side gutters. */
+const statsW = () => Math.round((GAME_WIDTH - MARGIN * 2 - GAP) * (320 / 760));
+const medalsW = () => GAME_WIDTH - MARGIN * 2 - GAP - statsW();
+const statsX = () => MARGIN;
+const medalsX = () => statsX() + statsW() + GAP;
 const panelH = () => GAME_HEIGHT - PANEL_Y - 103;
 const buttonY = () => GAME_HEIGHT - 64;
 
@@ -112,7 +114,7 @@ export class StatsScreen extends Screen {
     // Anchored to the panel block's own edges so the bar reads as part of the
     // layout rather than floating out at the stage corners.
     this.button("Back to Menu", statsX(), buttonY(), 200, () => this.back());
-    this.button("Reset Stats", medalsX() + MEDALS_W - 180, buttonY(), 180,
+    this.button("Reset Stats", medalsX() + medalsW() - 180, buttonY(), 180,
       () => this.askReset(), true);
 
     this.toast = new Text({
@@ -147,7 +149,7 @@ export class StatsScreen extends Screen {
     const x = statsX();
     const y = PANEL_Y;
     const h = panelH();
-    const panel = new Raze2Panel(STATS_W, h, { accent: C_OPTIONS_GREEN });
+    const panel = new Raze2Panel(statsW(), h, { accent: C_OPTIONS_GREEN });
     panel.view.x = x;
     panel.view.y = y;
     layer.addChild(panel.view);
@@ -167,7 +169,7 @@ export class StatsScreen extends Screen {
     });
     heading.alpha = A_HEADER;
     heading.anchor.set(0.5, 0);
-    heading.x = x + STATS_W / 2;
+    heading.x = x + statsW() / 2;
     heading.y = y + 18;
     layer.addChild(heading);
 
@@ -208,7 +210,7 @@ export class StatsScreen extends Screen {
       });
       v.alpha = A_VALUE;
       v.anchor.set(1, 0);
-      v.x = x + STATS_W - 18;
+      v.x = x + statsW() - 18;
       v.y = rowY;
       layer.addChild(v);
     });
@@ -228,7 +230,7 @@ export class StatsScreen extends Screen {
 
     const x = medalsX();
     const y = PANEL_Y;
-    const w = MEDALS_W;
+    const w = medalsW();
     const h = panelH();
     const panel = new Raze2Panel(w, h, { accent: C_OPTIONS_GREEN });
     panel.view.x = x;
@@ -294,8 +296,23 @@ export class StatsScreen extends Screen {
    */
   private awardRow(parent: Container, key: string, rowY: number, earned: boolean): number {
     const x = medalsX();
-    const w = MEDALS_W;
+    const w = medalsW();
     const medal = Achievements.getAch(key);
+
+    // The ten Raze 2 achievements carry their original `AchievementIcons_90`
+    // art (baked per label); the Raze 1 medals have no per-award icon here.
+    const iconTex = R2_ACH_IDS.includes(key) ? UiArt.r2(`ach_${key}`) : null;
+    const textX = x + (iconTex ? 66 : 18);
+    if (iconTex) {
+      const icon = new Sprite(iconTex);
+      const size = 40;
+      icon.width = size;
+      icon.height = size;
+      icon.x = x + 16;
+      icon.y = rowY + 2;
+      icon.alpha = earned ? 1 : 0.4;
+      parent.addChild(icon);
+    }
 
     const name = new Text({
       text: medal.name,
@@ -305,7 +322,7 @@ export class StatsScreen extends Screen {
       }),
     });
     name.alpha = earned ? A_LABEL : A_LABEL * 0.55;
-    name.x = x + 18;
+    name.x = textX;
     name.y = rowY;
     parent.addChild(name);
 
@@ -338,11 +355,11 @@ export class StatsScreen extends Screen {
         fontFamily: FONT_BODY,
         fontSize: 13,
         wordWrap: true,
-        wordWrapWidth: w - 36,
+        wordWrapWidth: w - (textX - x) - 18,
       }),
     });
     desc.alpha = earned ? A_BODY : A_BODY * 0.55;
-    desc.x = x + 18;
+    desc.x = textX;
     desc.y = rowY + 18;
     parent.addChild(desc);
 
@@ -352,7 +369,7 @@ export class StatsScreen extends Screen {
   // --- award-list scrolling -------------------------------------------------
 
   private buildScrollBar(layer: Container): void {
-    const x = medalsX() + MEDALS_W - 12;
+    const x = medalsX() + medalsW() - 12;
     const trackH = panelH() - (LIST_Y - PANEL_Y) - 22;
     const track = new Graphics();
     track.roundRect(x, LIST_Y + 4, 5, trackH, 2.5).fill({ color: 0x000000, alpha: 0.5 });
@@ -376,7 +393,7 @@ export class StatsScreen extends Screen {
     const trackH = this.scrollTrackH;
     const thumbH = Math.max(28, trackH * (trackH / (trackH + this.maxScroll)));
     const t = this.scroll / this.maxScroll;
-    const x = medalsX() + MEDALS_W - 12;
+    const x = medalsX() + medalsW() - 12;
     g.roundRect(x, LIST_Y + 4 + (trackH - thumbH) * t, 5, thumbH, 2.5)
       .fill({ color: C_OPTIONS_GREEN, alpha: 0.85 });
   }

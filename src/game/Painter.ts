@@ -1,20 +1,16 @@
 /**
- * Ported from Painter.as.
+ * Raze 2 has no wall-painting pass.
  *
- * Painter in the original was a Sprite that owned a BitmapData the size of
- * the arena's paintBox, scaled by Level.getPaintSize(level). On every
- * character death the ragdoll limbs and the splatter MovieClip (Splat) were
- * drawn into that BitmapData with an AffineTransform so blood smears
- * persisted on the walls/floor between matches.
+ * This file previously described porting a `Painter` that accumulated ragdoll
+ * limbs and blood splatter into a persistent `BitmapData` — that is Raze 1
+ * machinery and does not exist in the Raze 2 scripts (there is no `Painter` or
+ * `Splat` class anywhere in `decompiled_swf/raze 2/scripts`). Raze 2's
+ * `BitScreen` blits effects into a single bitmap that is cleared every frame
+ * (`BitScreen.EnterFrame`, BitScreen.as:29-32), so blood and debris vanish with
+ * their effect and never stick to the level.
  *
- * In the TS port this wall-painting step is intentionally not reproduced: the
- * death ragdoll and weapon are full physics objects that bounce around the
- * arena for a few seconds before settling, and the splatter effect is just
- * a temporary Graphics ring. Persistent blood on walls was a fun flavour
- * touch but is not part of the playable game-state model.
- *
- * If persistent blood ever needs to come back, the right place is a
- * RenderTexture that Ragdoll and Splat are rendered into each frame, sized
- * to the arena's bounds and composited under the gameplay layer.
+ * The port matches that: the death ragdoll and dropped weapon are physics
+ * objects that settle and evaporate, and the splatter is the baked `blood*`
+ * effect from `Fx.ts` playing out its clip. Nothing to persist.
  */
 export {};

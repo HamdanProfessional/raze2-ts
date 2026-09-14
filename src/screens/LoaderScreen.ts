@@ -26,11 +26,11 @@ import { PickupArt } from "../assets/PickupArt";
 import { PickupWeaponArt } from "../assets/PickupWeaponArt";
 import { FxArt } from "../assets/FxArt";
 import { installGunDrop } from "../assets/GunDrop";
-import { Parts } from "../assets/Parts";
+import { RagdollArt } from "../assets/RagdollArt";
 import { Backgrounds } from "../assets/Backgrounds";
 import { UiArt } from "../assets/UiArt";
 import { loadFonts } from "../ui/raze2/fonts";
-import { MenuScreen } from "./MenuScreen";
+import { IntroScreen } from "./IntroScreen";
 
 /**
  * Preloads assets then advances straight to the main menu. (The Juice-Tin
@@ -118,7 +118,6 @@ export class LoaderScreen extends Screen {
     // Art providers are plain registrations; the textures they reach for are
     // fetched by the jobs below and looked up lazily at draw time.
     installGunDrop(); // real dropped-weapon art for the ragdoll layer
-    Parts.install(); // ragdoll limbs use real per-costume art
 
     // Every loader owns its own cache and reads no other's, so they all run at
     // once — the browser stays saturated instead of idling between phases.
@@ -159,11 +158,11 @@ export class LoaderScreen extends Screen {
       jobs.map((j) => j.catch(() => {}).then(() => void (this.progress = ++done / jobs.length))),
     );
 
-    // 685 limb files for a layer that only appears when somebody is gibbed.
+    // Eight strips (~100K) for a layer that only appears when somebody dies.
     // Held back so it doesn't compete for connections with the art the menu
     // needs; it lands long before the player finishes picking a match, and an
     // unloaded limb just falls back to the placeholder.
-    void Parts.loadAll();
+    void RagdollArt.load();
 
     this.progress = 1;
     this.done = true;
@@ -175,7 +174,7 @@ export class LoaderScreen extends Screen {
     this.label.text = `LOADING  ${Math.round(this.shown * 100)}%`;
     // Hold until the bar has visibly caught up, so it never cuts away mid-sweep.
     if (this.done && this.shown > 0.995) {
-      this.engine.setScreen(MenuScreen);
+      this.engine.setScreen(IntroScreen);
     }
   }
 }

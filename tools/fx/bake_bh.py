@@ -49,10 +49,44 @@ sys.path.insert(0, os.path.join(SC, "..", "maps"))
 sys.path.insert(0, SC)
 import bg_place as B  # noqa: E402
 import bh_dump as D  # noqa: E402
-from bake_props import header, shelf_pack, sprite_dir  # noqa: E402
+from bake_props import SPRITES, header, shelf_pack, sprite_dir  # noqa: E402
 
 OUT = os.path.join(REPO, "public", "assets", "fx")
 RIG = os.path.join(REPO, "src", "assets", "fxRig.json")
+SHAPES = os.path.join(os.path.dirname(SPRITES), "shapes")
+
+# Entries whose extraction cannot be trusted, so the port keeps its hand-drawn
+# stand-in rather than shipping a bad bake.
+#
+# `photon_shot` (the Blaster's round, character 1760) is the only one. Every
+# other `*_shot` is a DefineSprite placed with a scale and a glow, and bakes to a
+# 4-26px sprite centred on its origin (`lx` around -w/2). This one is a bare
+# DefineShape placed at identity, and the +12.85,+13.4 its path coordinates
+# carry are the same offset the sprite entries express in their placement
+# matrix's translate — which the sheet deliberately drops, since the origin IS
+# where createEffect was called. So the two disagree about whose job that offset
+# is, and the result bakes as a 1x1 dot hanging 12px down-right of the round. A
+# shape whose geometry is pre-offset needs its own handling before this is
+# baked; until then the Blaster keeps its drawn energy bolt.
+SKIP = {"photon_shot"}
+
+
+def frame_svgs(cid):
+    """Every frame of character `cid`, in order.
+
+    Nearly every BH entry is a DefineSprite, which FFDec exports as a directory
+    of numbered frames. A couple are plain DefineShapes instead — one static
+    picture, nothing to animate — and those land in `shapes/<cid>.svg` with no
+    directory at all. Looking only in `sprites/` read that as a missing export
+    and skipped the effect (`photon_shot`, the Blaster's round, was the one it
+    cost), when it is really a one-frame clip.
+    """
+    d = sprite_dir(cid)
+    if d:
+        n = len([f for f in os.listdir(d) if f.endswith(".svg")])
+        return [os.path.join(d, f"{i}.svg") for i in range(1, n + 1)]
+    shape = os.path.join(SHAPES, f"{cid}.svg")
+    return [shape] if os.path.exists(shape) else []
 
 # The effects `Game.createEffect` asks for that the port had no art for. Every
 # one of them currently falls through `Fx.createEffect`'s `default:` and renders
@@ -278,17 +312,16 @@ def whiten(im):
 
 def bake_effect(pg, name, cid, rot_amt, sx, sy, fbody, tint, subs, bake):
     """Bake every frame x every rotation of one BH entry into a packed atlas."""
-    d = sprite_dir(cid)
-    if not d:
-        print(f"  !! no sprite export for cid {cid}")
+    svgs = frame_svgs(cid)
+    if not svgs:
+        print(f"  !! no export for cid {cid}")
         return None
-    nframes = len([f for f in os.listdir(d) if f.endswith(".svg")])
+    nframes = len(svgs)
     step = 360.0 / rot_amt
     imgs, meta, seen = [], [], {}
     for r in range(rot_amt):
-        for i in range(1, nframes + 1):
-            im, lx, ly = render(pg, os.path.join(d, f"{i}.svg"), sx, sy, r * step,
-                                fbody, bake)
+        for svg in svgs:
+            im, lx, ly = render(pg, svg, sx, sy, r * step, fbody, bake)
             if im is None:
                 imgs.append(None)
                 meta.append({"x": 0, "y": 0, "w": 0, "h": 0, "lx": 0, "ly": 0})
@@ -353,6 +386,10 @@ def main():
     missing = [n for n in want if n not in entries]
     if missing:
         raise SystemExit(f"not in the BH atlas: {', '.join(missing)}")
+    skipped = [n for n in want if n in SKIP]
+    if skipped:
+        print(f"skipping {', '.join(skipped)} (see SKIP)")
+        want = [n for n in want if n not in SKIP]
 
     rig = {"fx": {}, "note": (
         "BH atlas effects. `cells` is rotAmt*frames entries, rotation-major: cell "

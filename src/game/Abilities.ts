@@ -22,6 +22,7 @@ import { SD } from "../state/SD";
 import { Achievements } from "./Achievements";
 import { WEAPONS, type WeaponDef } from "./weapons";
 import { Projectile } from "./Projectile";
+import { bloodName } from "./Guns";
 import { canHarm } from "./Match";
 
 export interface AbilityDef {
@@ -208,7 +209,7 @@ function apply(unit: any, ab: AbilityDef): void {
             // The `sword` pseudo-gun is what "Slasher!" keys on.
             cause: { gun: "sword" },
           });
-          game.addEffect(other.x, other.y - 40 * other.scale, "blood");
+          game.addEffect(other.x, other.y - 40 * other.scale, bloodName(other));
         }
       }
       game.addEffect(unit.x + unit.facing * 30, unit.y - 45 * unit.scale, "crit");

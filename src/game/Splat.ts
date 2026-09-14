@@ -1,15 +1,15 @@
 /**
- * Ported from Splat.as.
+ * Ported from the Raze 2 blood effect path, and deliberately just a re-export.
  *
- * Splat in the original was the random-frame blood splatter MovieClip that
- * the Painter drew into its BitmapData on every frame-script checkpoint.
- * Each frame picked a random sub-frame of the splatter (so the streak looked
- * chunky + random) and then called painter.drawMe(this) which painted
- * itself with its affine Matrix.
+ * Raze 2 has no persistent splatter: every effect — blood included — is one
+ * `Effect` blitted by `BitScreen.paint`, and `BitScreen.EnterFrame` clears the
+ * whole bitmap (`data.fillRect(rect, 0)`, BitScreen.as:29-32) before anything
+ * paints. A corpse's blood is the ordinary `bloodHuman`/skinned `blood*` clip
+ * fired by `Bullet.as`, not a decal.
  *
- * In the TS port splatter is rendered as a short-lived Graphics ring in
- * GameScreen.addEffect(x, y, "blood" / "bloodBig"). The expanding-circle
- * ring with a fading red stroke matches the original's visual feel without
- * needing persistent bitmap state.
+ * The port plays the real thing: `GameScreen.addEffect(x, y, skin.blood)` looks
+ * the name up in the baked `BH` atlas (`tools/fx/bake_bh.py`), where the five
+ * recoloured splatters are one white mask under five tints, and rolls one of
+ * its three rotations per spawn. Nothing accumulates, exactly as in the SWF.
  */
 export {};

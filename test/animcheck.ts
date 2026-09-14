@@ -31,6 +31,7 @@ const SWF_RANGES: Record<string, [number, number]> = {
   duck: [161, 163],
   crouch: [164, 179], // duckloop
   getup: [180, 183],
+  armorlock: [184, 230], // Static Field freeze
 };
 
 const states = (SKIN_ANIM as any).states as Record<string, { start: number; count: number }>;
@@ -71,6 +72,10 @@ const BLOCKED: [AnimState, AnimState][] = [
 for (const [cur, req] of BLOCKED) {
   check(`guard ${cur} -> ${req} is ignored`, resolveGoto(cur, req) === null);
 }
+// `armorlock` blocks every unforced request (UnitMC.as:145).
+for (const req of ["idle", "run", "jump", "crouch", "fall"] as AnimState[]) {
+  check(`guard armorlock -> ${req} is ignored`, resolveGoto("armorlock", req) === null);
+}
 check("guard duck -> idle becomes getup", resolveGoto("duck", "idle") === "getup");
 check("guard crouch -> idle becomes getup", resolveGoto("crouch", "idle") === "getup");
 check("guard idle -> run is allowed", resolveGoto("idle", "run") === "run");
@@ -103,6 +108,18 @@ check("jump runs on into fall", playOut("jump").state === "fall");
   for (let i = 0; i < 200; i++) a.advance(states.tuck.count);
   check("tuck holds its last frame", a.state === "tuck" && a.frame === states.tuck.count,
     `${a.state}:${a.frame}`);
+}
+{
+  const a = new UnitAnimator();
+  a.goto("armorlock", true);
+  for (let i = 0; i < 200; i++) {
+    a.goto("idle"); // movement re-requests its state every tick; the pose must not budge
+    a.advance(states.armorlock.count);
+  }
+  check("armorlock holds until forced out",
+    a.state === "armorlock" && a.frame === states.armorlock.count, `${a.state}:${a.frame}`);
+  a.goto("idle", true); // the frame-230 end script's forced exit
+  check("forced goto leaves armorlock", a.state === "idle", a.state);
 }
 // frame99 / frame183: goto("idle", true).
 check("land returns to idle", playOut("land").state === "idle");

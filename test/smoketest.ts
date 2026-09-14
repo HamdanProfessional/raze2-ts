@@ -14,6 +14,7 @@ import { SD } from "../src/state/SD";
 import { Quality, QUALITY_LEVELS } from "../src/state/Quality";
 import { GameScreen } from "../src/game/GameScreen";
 import { getCamp } from "../src/game/Campaign";
+import { RAZE2_SKINS } from "../src/assets/raze2";
 import { ARM_SCALE } from "../src/game/Unit";
 import { Arena, LEVELS, RAZE2_ITEM_KIND } from "../src/game/Arena";
 import { SPREE_TIERS } from "../src/game/Score";
@@ -22,6 +23,7 @@ import { RAZE2_KILL_BONUS_BY_ID } from "../src/assets/raze2";
 import { Water } from "../src/game/Water";
 import { Reflection } from "../src/game/Reflection";
 import { PhysVap } from "../src/physics/PhysVap";
+import RAGDOLL_RIG from "../src/assets/raze2/ragdollRig.json";
 import { MapParticles } from "../src/game/MapParticles";
 import { EMITTERS } from "../src/game/mapEmitters";
 import { Transition } from "../src/core/Transition";
@@ -65,6 +67,29 @@ const beforeActors = g.rdPhys.actors.length;
 ai.status.doDamage(999999, { x: 1, y: -0.5, attacker: g.player, headShot: true });
 if (!ai.status.dead) throw new Error("AI did not die from lethal damage");
 const ragdollSpawned = g.rdPhys.actors.length > beforeActors;
+
+// The corpse wears the dead unit's own costume, and wears ONE of them: Raze 2
+// pushes a single index (`unit.MC.curSkin`) into every part clip, so a rig that
+// reports two different frames has re-introduced per-part costuming.
+{
+  const actor: any = g.rdPhys.actors[g.rdPhys.actors.length - 1];
+  const frames = new Set<number>(
+    actor.allParts.map((p: any) => p.getUserData()?.skinFrame),
+  );
+  const skinFrame = (RAZE2_SKINS as { id: string; frame: number }[])
+    .find((s) => s.id === ai.skinId)?.frame;
+  if (actor.allParts.length !== 14) {
+    throw new Error(`ragdoll: ${actor.allParts.length} parts, want 14`);
+  }
+  if (frames.size !== 1) {
+    throw new Error(`ragdoll: parts wear ${frames.size} costumes (${[...frames]}), want 1`);
+  }
+  if (skinFrame && !frames.has(Number(skinFrame))) {
+    throw new Error(
+      `ragdoll: corpse wears frame ${[...frames][0]}, want the skin's own ${skinFrame}`,
+    );
+  }
+}
 
 // Let the ragdoll settle and the AI respawn.
 for (let i = 0; i < 200; i++) g.enterFrame(1);
@@ -439,7 +464,7 @@ console.log("resetStats cleared stats/medals, kept profile + stage", SD.curStage
 // team-tinted scoreboard), and each zone is only exercised by the state that
 // turns it on. Build one match per mode and drive every one of them.
 for (const type of ["dm", "tdm", "elim", "telim"]) {
-  SD.matchSettings = { type, opponents: 3, level: "city", score: 10, diff: 1 } as any;
+  SD.matchSettings = { type, opponents: 3, level: "r2_jungle", score: 10, diff: 1 } as any;
   const gm = new GameScreen(fakeEngine, undefined);
   const hud: any = gm.hud;
   const teamMode = type === "tdm" || type === "telim";
@@ -697,13 +722,17 @@ console.log("ssMode hide + restore ok");
   gm.enterFrame(1);
   const label: string = gm.hitboxLabel.text;
   if (!gm.hitboxLabel.visible) throw new Error("hitboxes: readout hidden while on");
-  // Rect levels append " slopes N" after the wall count (Raze 2 maps read
-  // "mask" instead and have no slope segments of their own).
+  // Raze 2 maps report "mask" (headless that decodes to no mask, so the wall
+  // count reads 0); the traced families that must be populated are units,
+  // pickups and planck bodies.
   const counts =
-    /units (\d+)\s+walls (\d+)(?:\s+slopes \d+)?\s+pickups (\d+)\s+bodies (\d+)/.exec(label);
+    /units (\d+)\s+(?:walls (\d+)|mask)(?:\s+slopes \d+)?\s+pickups (\d+)\s+bodies (\d+)/.exec(label);
   if (!counts) throw new Error(`hitboxes: unreadable label "${label}"`);
-  const [, units, walls, pickups, bodies] = counts.map(Number);
-  if (!(units > 0 && walls > 0 && pickups > 0 && bodies > 0)) {
+  const units = Number(counts[1]);
+  const walls = Number(counts[2] ?? 0);
+  const pickups = Number(counts[3]);
+  const bodies = Number(counts[4]);
+  if (!(units > 0 && pickups > 0 && bodies > 0)) {
     throw new Error(`hitboxes: empty family in "${label}"`);
   }
 
@@ -770,134 +799,6 @@ console.log("ssMode hide + restore ok");
   }
 }
 
-// --- sloped terrain: fitted diagonals are ridden, not stair-stepped --------
-// The Raze 1 levels' collision was extracted as a 3px-quantized maximal-rect
-// cover, which is exact for flat platforms but turns every diagonal into a
-// staircase — 37% of all rects across the four levels. `tools/slopes/
-// fit_slopes.py` recovers those diagonals from the cover's top edge as real
-// segments. Assert both halves: the segments describe actual geometry, and a
-// real player walked across one tracks it instead of jamming on the risers.
-{
-  for (const id of ["city", "toxic", "pit", "space"]) {
-    SD.matchSettings.level = id;
-    const a: any = new Arena();
-    if (!a.slopes.length) throw new Error(`slopes: ${id} loaded none`);
-    for (const s of a.slopes) {
-      if (!(s.x1 > s.x0)) {
-        throw new Error(`slopes: ${id} segment ${JSON.stringify(s)} is not left-to-right`);
-      }
-      // A fitted segment must sit on the cover it was fitted from: some rect
-      // covering that x must carry material in the band just beneath it.
-      //
-      // Deliberately an overlap test rather than `pointInWall`. That helper
-      // tests rects with strict inequalities, so a probe landing exactly on the
-      // seam between two abutting rects reads as empty — and since the whole
-      // extraction is on a 3px grid, point probes land on seams constantly.
-      // Overlap has no such measure-zero hole.
-      let solid = 0;
-      for (let k = 1; k <= 5; k++) {
-        const t = k / 6;
-        const px = s.x0 + (s.x1 - s.x0) * t;
-        const py = s.y0 + (s.y1 - s.y0) * t;
-        const found = a.walls.some((w: any) => {
-          const l = w.x - w.width / 2;
-          const r = w.x + w.width / 2;
-          // Inclusive in x for the same reason: abutting rects share an edge,
-          // and "is there material at this x" must say yes on the seam.
-          return px >= l && px <= r && w.y + w.height / 2 > py + 1 && w.y - w.height / 2 < py + 9;
-        });
-        if (found) solid++;
-      }
-      if (solid < 5) {
-        const mx = ((s.x0 + s.x1) / 2) | 0;
-        const my = ((s.y0 + s.y1) / 2) | 0;
-        throw new Error(`slopes: ${id} segment at ${mx},${my} floats (${solid}/5 probes solid)`);
-      }
-    }
-  }
-
-  // Walk the longest slope in `space` (47 segments, more than any other level).
-  SD.matchSettings = { type: "dm", opponents: 1, level: "space", score: 10, diff: 1 } as any;
-  const gm: any = new GameScreen({ app: {}, root: { addChild() {} }, overlay: {} }, undefined);
-  for (let i = 0; i < 40; i++) gm.enterFrame(1);
-  const arena: any = gm.arena;
-  const lineY = (s: any, x: number) =>
-    s.y0 + ((s.y1 - s.y0) * (x - s.x0)) / (s.x1 - s.x0);
-
-  // Longest segment with clear headroom, so the walk is not fighting a ceiling.
-  const seg = arena.slopes
-    .slice()
-    .sort((a: any, b: any) => b.x1 - b.x0 - (a.x1 - a.x0))
-    .find((s: any) => {
-      const mx = (s.x0 + s.x1) / 2;
-      return !arena.pointInWall(mx, lineY(s, mx) - 40);
-    });
-  if (!seg) throw new Error("slopes: space has no segment with headroom to walk");
-
-  const p: any = gm.player;
-  const startX = seg.x0 + 6;
-  p.x = startX;
-  p.y = lineY(seg, startX);
-  p.jumping = null;
-  p.moving.vel = 0;
-  Input.mouseX = GAME_WIDTH; // aim right so the unit faces the way it walks
-  (Input as any).down.add("KeyD");
-
-  const startY = p.y;
-  let worstOff = 0;
-  let samples = 0;
-  let reached = startX;
-  let crest = startY;
-  for (let i = 0; i < 110; i++) {
-    gm.enterFrame(1);
-    if (p.status?.dead) break;
-    if (p.x > seg.x1) break; // walked clear off the top — the climb is done
-    if (p.x < seg.x0) continue;
-    reached = Math.max(reached, p.x);
-    crest = Math.min(crest, p.y); // y grows downward, so the crest is the min
-    worstOff = Math.max(worstOff, Math.abs(p.y - lineY(seg, p.x)));
-    samples++;
-  }
-  (Input as any).down.delete("KeyD");
-
-  const span = seg.x1 - seg.x0;
-  // Progress along the segment, not final x: once the unit crests the top it
-  // leaves the slope entirely, and where it ends up after that says nothing.
-  const covered = reached - startX;
-  const deg = Math.abs((Math.atan2(seg.y1 - seg.y0, span) * 180) / Math.PI);
-  // Jamming on a riser is the failure this work removes, so the unit has to
-  // actually get somewhere.
-  // Jamming on a riser is the failure this work removes. Before the fitted
-  // segments the unit stalled after ~25% of this slope; assert both that it
-  // travelled and that it actually gained the height, which is the property
-  // that makes it a slope rather than a wall.
-  if (covered < span * 0.7) {
-    throw new Error(
-      `slopes: unit jammed — covered ${covered.toFixed(0)}px of a ${span.toFixed(0)}px slope`,
-    );
-  }
-  const rise = startY - crest;
-  const fullRise = Math.abs(seg.y1 - seg.y0);
-  if (rise < fullRise * 0.7) {
-    throw new Error(
-      `slopes: unit climbed only ${rise.toFixed(0)}px of a ${fullRise.toFixed(0)}px rise`,
-    );
-  }
-  if (samples < 8) throw new Error(`slopes: only ${samples} samples on the slope`);
-  // Riding the segment means staying on it. A unit stair-stepping the raw cover
-  // drifts well clear of the fitted line between risers.
-  if (worstOff > 8) {
-    throw new Error(`slopes: unit strayed ${worstOff.toFixed(1)}px from the slope surface`);
-  }
-  console.log(
-    `slopes: fitted segments on all 4 rect levels sit on real geometry; walked ` +
-      `${covered.toFixed(0)}/${span.toFixed(0)}px up a ${deg.toFixed(0)}° slope ` +
-      `(+${rise.toFixed(0)}px of ${fullRise.toFixed(0)}px rise), tracking it within ` +
-      `${worstOff.toFixed(1)}px`,
-  );
-  gm.destructor();
-}
-
 // --- arena containment: nothing survives outside the box -------------------
 // `Unit.as:577` kills anything outside a 2880x2880 arena box. The boundary
 // walls are the primary containment, but the x-pass pushes a unit out of a wall
@@ -905,7 +806,7 @@ console.log("ssMode hide + restore ok");
 // ejected *outwards* — a live soak caught the player at x=-371 on `space`,
 // riding the global floor plane and then wedging there, alive and unreachable.
 {
-  SD.matchSettings = { type: "dm", opponents: 1, level: "city", score: 10, diff: 1 } as any;
+  SD.matchSettings = { type: "dm", opponents: 1, level: "r2_jungle", score: 10, diff: 1 } as any;
   const gm: any = new GameScreen({ app: {}, root: { addChild() {} }, overlay: {} }, undefined);
   for (let i = 0; i < 40; i++) gm.enterFrame(1);
   const p: any = gm.player;
@@ -923,13 +824,11 @@ console.log("ssMode hide + restore ok");
 
   const box = gm.arena.killBounds;
 
-  // In bounds: left alone. Including the parts of the level that sit at
-  // negative coordinates — these are real platforms, not "outside". Before the
-  // box was derived per level, the literal `y < 0` killed units standing here.
+  // In bounds: left alone. Raze 2 maps use the SWF's literal 0..2880 box, so
+  // anything inside it survives whatever the collision looks like.
   for (const [lx, ly, why] of [
     [200, 200, "in the middle of the level"],
-    [-20, 300, "on the geometry left of x=0"],
-    [400, -60, "on the geometry above y=0"],
+    [box.x0 + 4, 300, "on the level edge inside the box"],
   ] as [number, number, string][]) {
     revive();
     p.x = lx;
@@ -965,9 +864,8 @@ console.log("ssMode hide + restore ok");
   gm.enterFrame(1);
   if (!p.status.dead) throw new Error("bounds: spawn invulnerability survived falling out");
   console.log(
-    `bounds: units outside city's box x[${Math.round(box.x0)},${Math.round(box.x1)}] ` +
-    `y[${Math.round(box.y0)},${Math.round(box.y1)}] die to the environment; ` +
-    "its negative-coordinate geometry is in bounds",
+    `bounds: units outside the map box x[${Math.round(box.x0)},${Math.round(box.x1)}] ` +
+    `y[${Math.round(box.y0)},${Math.round(box.y1)}] die to the environment`,
   );
   gm.destructor();
 }
@@ -979,7 +877,7 @@ console.log("ssMode hide + restore ok");
 // line to the cursor. The port used one angle for both the arm sprite and the
 // bullet, so you could flip and still shoot exactly where you pointed.
 {
-  SD.matchSettings = { type: "dm", opponents: 1, level: "city", score: 10, diff: 1 } as any;
+  SD.matchSettings = { type: "dm", opponents: 1, level: "sandbox", score: 10, diff: 1 } as any;
   const gm: any = new GameScreen({ app: {}, root: { addChild() {} }, overlay: {} }, undefined);
   for (let i = 0; i < 40; i++) gm.enterFrame(1);
   const p: any = gm.player;
@@ -1106,7 +1004,7 @@ console.log("ssMode hide + restore ok");
   }
 
   // The human is team 1, so their own objective must carry the friendly tint.
-  SD.matchSettings = { type: "ctf", team: true, opponents: 1, level: "city", score: 3, diff: 1 } as any;
+  SD.matchSettings = { type: "ctf", team: true, opponents: 1, level: "r2_jungle", score: 3, diff: 1 } as any;
   const gm: any = new GameScreen({ app: {}, root: { addChild() {} }, overlay: {} }, undefined);
   for (let i = 0; i < 20; i++) gm.enterFrame(1);
   const mine = gm.player.team;
@@ -1126,7 +1024,7 @@ console.log("ssMode hide + restore ok");
 // the fix — the stacking order and the per-effect routing — since either one
 // can regress on its own and neither is visible from the other.
 {
-  SD.matchSettings.level = "city";
+  SD.matchSettings.level = "r2_jungle";
   const lg: any = new GameScreen({ app: {}, root: { addChild() {} }, overlay: {} }, undefined);
   for (let i = 0; i < 40; i++) lg.enterFrame(1);
 
@@ -1186,7 +1084,7 @@ console.log("ssMode hide + restore ok");
 // match ends, and the auto-exit must hand back to the level screen (Quick
 // Match) rather than the main menu.
 {
-  SD.matchSettings.level = "city";
+  SD.matchSettings.level = "r2_jungle";
   SD.matchSettings.campaign = 0;
 
   const nav: any[] = [];
@@ -1217,8 +1115,8 @@ console.log("ssMode hide + restore ok");
     if (typeof n?.text === "string" && n.text) cardText.push(n.text);
     for (const c of n?.children ?? []) walk(c);
   })(rg.roundEnd);
-  if (!cardText.includes("VICTORY")) {
-    throw new Error(`round end: card has no VICTORY header (got ${cardText.join("|")})`);
+  if (!cardText.includes("VICTORY!")) {
+    throw new Error(`round end: card has no VICTORY! header (got ${cardText.join("|")})`);
   }
   if (!cardText.includes("KILLS") || !cardText.includes("DEATHS")) {
     throw new Error("round end: card has no scoreboard");
@@ -1423,9 +1321,9 @@ console.log("ssMode hide + restore ok");
   if (!a2.wayNodes.some((n: any) => n.actions.length)) {
     throw new Error("waypoints: r2_jungle wayNodes carry no jump zones");
   }
-  SD.matchSettings.level = "pit";
+  SD.matchSettings.level = "sandbox";
   const a1: any = new Arena();
-  if (a1.authoredWaypoints) throw new Error("waypoints: pit has no authored graph to report");
+  if (a1.authoredWaypoints) throw new Error("waypoints: sandbox has no authored graph to report");
 
   const totalW = Object.values(r2).reduce(
     (n: number, m: any) => n + (m?.waypoints?.length ?? 0), 0);
@@ -1563,7 +1461,11 @@ console.log("ssMode hide + restore ok");
       if (!(y < -25 && y > -70)) {
         throw new Error(`ability: "${name}" attach y=${y} is not on the torso`);
       }
-      if (Math.abs(x) > 40 || Math.abs(rot) > 45) {
+      // `armorlock` is the one pose that leans the torso hard (the Static Field
+      // brace rotates the body up to ~53 degrees, and the pack rides it); every
+      // standing/running pose stays within 45.
+      const rotCap = name === "armorlock" ? 60 : 45;
+      if (Math.abs(x) > 40 || Math.abs(rot) > rotCap) {
         throw new Error(`ability: "${name}" attach (${x}, rot ${rot}) is out of range`);
       }
     }
@@ -1820,15 +1722,9 @@ console.log("ssMode hide + restore ok");
   if (arena.corpseGeometry !== arena.physBoxes) {
     throw new Error("physbox: a mask map is still handing rect walls to the corpse world");
   }
-  SD.matchSettings.level = "city";
-  const rect1: any = new Arena();
-  if (rect1.wallMask || rect1.corpseGeometry !== rect1.walls) {
-    throw new Error("physbox: a Raze 1 level stopped using its own rects for corpses");
-  }
-  if (!rect1.walls.length) throw new Error("physbox: city has no walls to give");
   console.log(
-    `physbox: 93 authored ragdoll rects across jungle/mines/snow, ` +
-    `all in bounds; Raze 1 levels keep their own walls`,
+    `physbox: 93 authored ragdoll rects across jungle/mines/snow, all in ` +
+    `bounds; mask maps hand them to the corpse world`,
   );
 }
 
@@ -2156,7 +2052,7 @@ console.log("ssMode hide + restore ok");
 {
   // Rapid Fire (`Guns.as:406/416`, `NodePickup.as:245`): 2x fire rate, no ammo
   // drain, and every gun goes full-auto because `shotPressed` is not latched.
-  SD.matchSettings = { type: "dm", opponents: 1, level: "city", score: 10, diff: 1 } as any;
+  SD.matchSettings = { type: "dm", opponents: 1, level: "r2_jungle", score: 10, diff: 1 } as any;
   const gm: any = new GameScreen({ app: {}, root: { addChild() {} }, overlay: {} }, undefined);
   for (let i = 0; i < 40; i++) gm.enterFrame(1);
   const p: any = gm.player;
@@ -2244,39 +2140,21 @@ console.log("ssMode hide + restore ok");
 // once the shortcut it exists to provide has been used. `Arena.jumpPads` is
 // built once from the map JSON, so reading pads from it left a pad live in the
 // world for the rest of the walkthrough that fires the player back across the
-// map to a beat they already finished. Two invariants, both checkable here:
-// a staged mask must win over the stale list, and the maskless Raze 1 levels
-// must still fall back to it.
+// map to a beat they already finished. The invariant: a staged mask always
+// wins over the stale list, and a deleted pad leaves nothing behind.
 {
-  // Raze 1 `pit` decodes no PNG, so its four rect pads are the only ones there
-  // are — the fallback path has to keep working.
-  SD.matchSettings.level = "pit";
-  const pit: any = new Arena();
-  if (pit.wallMask) throw new Error("pads: pit unexpectedly has a pixel mask");
-  if (pit.jumpPads.length !== 4) {
-    throw new Error(`pads: pit has ${pit.jumpPads.length} rect pads, expected 4`);
-  }
-  for (const p of pit.jumpPads) {
-    const hit = pit.jumpPadAt(p.x + p.w / 2, p.y);
-    if (!hit) throw new Error(`pads: pit rect pad at ${p.x},${p.y} no longer fires`);
-    if (hit.power !== p.power) {
-      throw new Error(`pads: pit pad power ${hit.power}, expected ${p.power}`);
-    }
-  }
-  // Feet well clear of the plate must NOT launch — the band is ±8px.
-  if (pit.jumpPadAt(pit.jumpPads[0].x + 2, pit.jumpPads[0].y - 40)) {
-    throw new Error("pads: pit fired from 40px above the plate");
-  }
+  SD.matchSettings.level = "r2_jungle";
+  const arena: any = new Arena();
 
-  // Now the mask path. A stub mask standing in for the decoded special layer:
-  // it reports a pad in one band and nothing anywhere else, while the stale
-  // rect list still claims pads at the old coordinates.
+  // A stub mask standing in for the decoded special layer: it reports a pad in
+  // one band and nothing anywhere else, while the map-JSON list still claims
+  // pads at its own coordinates.
   const staged = { power: 1.3, dirX: -55 };
-  pit.wallMask = {
+  arena.wallMask = {
     jumpPadAt: (x: number, y: number) =>
       x >= 2364 && x <= 2475 && y >= 894 && y <= 948 ? staged : null,
   };
-  const onStaged = pit.jumpPadAt(2400, 940);
+  const onStaged = arena.jumpPadAt(2400, 940);
   if (!onStaged) throw new Error("pads: staged mask pad did not fire");
   if (onStaged.power !== staged.power || onStaged.dirX !== staged.dirX) {
     throw new Error(
@@ -2284,22 +2162,21 @@ console.log("ssMode hide + restore ok");
       `expected ${staged.power}x/${staged.dirX}`,
     );
   }
-  // The rect list still has pit's four pads; with a mask staged, none of them
-  // may fire. This is the regression that stranded the tutorial.
-  for (const p of pit.jumpPads) {
-    if (pit.jumpPadAt(p.x + p.w / 2, p.y)) {
+  // The map-JSON list still has its pads; with a mask staged none may fire.
+  for (const p of arena.jumpPads) {
+    if (arena.jumpPadAt(p.x + p.w / 2, p.y)) {
       throw new Error(
         `pads: stale map-JSON pad at ${p.x},${p.y} still fires while a mask is staged`,
       );
     }
   }
   // ...and when the step deletes the pad, the world must have no pad at all.
-  pit.wallMask = { jumpPadAt: () => null };
-  if (pit.jumpPadAt(2400, 940)) throw new Error("pads: deleted pad still fires");
+  arena.wallMask = { jumpPadAt: () => null };
+  if (arena.jumpPadAt(2400, 940)) throw new Error("pads: deleted pad still fires");
 
   console.log(
-    "pads: pit's 4 rect pads fire via the maskless fallback; a staged mask " +
-    "overrides the map-JSON list and a deleted pad leaves nothing behind",
+    "pads: a staged mask overrides the map-JSON list and a deleted pad " +
+    "leaves nothing behind",
   );
 }
 
@@ -2754,10 +2631,11 @@ console.log("ssMode hide + restore ok");
   const { createEffect } = await import("../src/game/Fx");
   const fs = await import("node:fs");
 
-  const WANT = [
-    "smoke_big", "smoke_med", "mud_splash", "sand_splash", "leaf_splash",
-    "shieldbreak", "bloodShield", "bloodRainbow", "flagReset1", "flagReset2",
-  ];
+  // The whole atlas, not a hand-listed subset: `bake_bh.py --all` walks the BH
+  // timeline, so anything it produced has to survive these checks or the next
+  // re-bake can quietly ship a broken clip.
+  const WANT = FxArt.names();
+  if (WANT.length < 55) throw new Error(`fx: only ${WANT.length} effects baked, want the full BH atlas`);
   for (const name of WANT) {
     const def = FxArt.def(name);
     if (!def) throw new Error(`fx: "${name}" is not in the baked atlas`);
@@ -2796,13 +2674,62 @@ console.log("ssMode hide + restore ok");
     throw new Error("fx: bloodRainbow was whitened — its gradient glow is the effect");
   }
 
-  // Procedural names still win: re-baking more of the atlas must not silently
-  // replace effects that already look right.
+  // The atlas wins. It used to be the other way round — the hand-drawn library
+  // took priority so that baking more art could not silently replace effects
+  // that already looked right — but the whole atlas is extracted now, so what
+  // that ordering actually protected was the stand-ins.
   await FxArt.load();
   const mud: any = createEffect("mud_splash");
   if (!mud.def) throw new Error("fx: mud_splash did not resolve to the baked atlas");
+  // Requested under the port's invented name, resolved through BH_ALIAS.
   const spark: any = createEffect("pistol");
-  if (spark.def) throw new Error("fx: the atlas overrode the procedural pistol spark");
+  if (!spark.def) throw new Error("fx: the procedural spark overrode the baked atlas");
+  // ...but only where there IS art. `crit` is the port's own kill cue and the
+  // SWF has no clip for it, so it must still come back hand-drawn rather than
+  // as a generic ring.
+  const crit: any = createEffect("crit");
+  if (crit.def) throw new Error("fx: crit resolved to the atlas, which has no such clip");
+  // A name with no art AND no stand-in must not silently become a blank clip.
+  const nothing: any = createEffect("no_such_effect_at_all");
+  if (nothing.def) throw new Error("fx: an unknown name resolved to the atlas");
+
+  // Every clip the catalog names — `effShoot` at the muzzle, `effHit` at the
+  // impact, `params[0]` for the round itself — has to exist, because these are
+  // no longer guesses the port can quietly substitute for. The one exception is
+  // documented in `bake_bh.py`'s SKIP.
+  const { RAZE2_WEAPONS } = await import("../src/assets/raze2");
+  const SKIP = new Set(["photon_shot"]);
+  const asked = new Set<string>();
+  for (const w of RAZE2_WEAPONS) {
+    if (w.effShoot) asked.add(w.effShoot);
+    if (w.effHit) asked.add(w.effHit);
+    const p0 = Array.isArray(w.params) ? w.params[0] : undefined;
+    if (typeof p0 === "string") asked.add(p0);
+  }
+  const orphans = [...asked].filter((n) => !SKIP.has(n) && !FxArt.has(n));
+  if (orphans.length) {
+    throw new Error(`fx: weapons name effects with no baked art: ${orphans.join(", ")}`);
+  }
+
+  // ...and the weapon defs must carry those names through rather than the
+  // behaviour-guessed stand-ins they used to be built from. A rocket and a
+  // grenade are both splash projectiles and both hit with `gas_big`, but a
+  // sniper is `spark_big` and an alien sniper `plasma_explode` — distinctions
+  // no rayType/splash pair can recover.
+  const { WEAPONS } = await import("../src/game/weapons");
+  for (const [id, eff] of [["rocket", "gas_big"], ["sniper", "spark_big"],
+                           ["asniper", "plasma_explode"], ["chaingun", "chain_hit"]] as const) {
+    if (WEAPONS[id]?.wallEff !== eff) {
+      throw new Error(`fx: ${id} hits with "${WEAPONS[id]?.wallEff}", want the authored "${eff}"`);
+    }
+  }
+  if (WEAPONS.flamethrower?.projTrail !== "flame") {
+    throw new Error(`fx: the flamethrower's round is "${WEAPONS.flamethrower?.projTrail}", want "flame"`);
+  }
+  console.log(
+    `fx: ${asked.size} authored effect names across the catalog all resolve to ` +
+    "baked art, and the weapon defs carry them through",
+  );
 
   // It runs exactly `frames` ticks and then reports done, like Effect.as
   // (`paint(); frame++; if (frame > stats.frames) remove = true`).
@@ -2818,8 +2745,8 @@ console.log("ssMode hide + restore ok");
 
   console.log(
     `fx: all ${WANT.length} BH effects baked and wired (bloodShield tints one ` +
-    "white mask gold, bloodRainbow keeps its gradient glow, procedural effects " +
-    "still take priority)",
+    "white mask gold, bloodRainbow keeps its gradient glow, the atlas now takes " +
+    "priority and only art-less names stay hand-drawn)",
   );
 }
 
@@ -2860,6 +2787,14 @@ console.log("ssMode hide + restore ok");
   }
   if (Math.abs(p.bob) > 1e-9 && p.bob !== 0) throw new Error("weappickup: the bob cycle did not close");
 
+  // The stand and floating gun tilt with the platform they stand on.
+  const leaning = new PickupWeapon(
+    { id: "t2", type: "shotgun", x: 100, y: 200, respawnSecs: 20 }, 0, 0.3,
+  ) as any;
+  if (Math.abs(leaning.view.rotation - 0.3) > 1e-9) {
+    throw new Error(`weappickup: platform lean not applied (rotation ${leaning.view.rotation})`);
+  }
+
   // A taken pickup stops bobbing and comes back after its respawn.
   p.tryTouch({ x: 100, y: 220, gun: { pickUpGun() {} } });
   if (p.view.visible) throw new Error("weappickup: still visible after being taken");
@@ -2888,6 +2823,67 @@ console.log("ssMode hide + restore ok");
     "weappickup: floor weapons stand on the authentic lit base with the gun " +
     "floating 40px over it, bobbing 8px, respawn on their timer, and every " +
     "droppable gun has an icon on disk",
+  );
+}
+
+// --- ragdoll rig ---------------------------------------------------------
+{
+  const rig = RAGDOLL_RIG as unknown as {
+    supersample: number;
+    frames: number[];
+    abilityOffset: [number, number];
+    parts: Record<string, { cid: number; cell: [number, number]; ox: number; oy: number; hit: [number, number][] }>;
+  };
+
+  const KINDS = ["body", "head", "hand", "foot", "upperArm", "lowerArm", "upperLeg", "lowerLeg"];
+  for (const k of KINDS) {
+    if (!rig.parts[k]) throw new Error(`ragdoll: no rig entry for ${k}`);
+  }
+
+  // Every skin must have a cell, or a corpse silently wears someone else's
+  // costume — the bake keys off skins.json, so a new skin must re-bake.
+  for (const s of RAZE2_SKINS as { id: string; frame: number }[]) {
+    if (!rig.frames.includes(Number(s.frame))) {
+      throw new Error(`ragdoll: skin ${s.id} (frame ${s.frame}) has no baked cell`);
+    }
+  }
+  for (const [k, def] of Object.entries(rig.parts)) {
+    if (def.hit.length !== rig.frames.length) {
+      throw new Error(`ragdoll: ${k} has ${def.hit.length} hit sizes for ${rig.frames.length} frames`);
+    }
+    // The registration point must lie inside the cell; an anchor outside it
+    // means the crop and the origin disagreed and limbs will swing wide.
+    if (def.ox < 0 || def.oy < 0 || def.ox > def.cell[0] || def.oy > def.cell[1]) {
+      throw new Error(`ragdoll: ${k} origin (${def.ox},${def.oy}) outside cell ${def.cell}`);
+    }
+  }
+
+  // The rig is authored in raw SWF pixels. PhysActor applies no scale factor,
+  // so the corpse must measure up against the LIVE character, not against
+  // UNIT_SCALE (0.42) — that mismatch is what made corpses half-size.
+  const torso = rig.parts.body.cell[1];
+  const legs = rig.parts.upperLeg.cell[1] + rig.parts.lowerLeg.cell[1];
+  const standing = torso + legs + rig.parts.head.cell[1];
+  if (standing < 80 || standing > 130) {
+    throw new Error(`ragdoll: assembled height ${standing}px is not character-sized`);
+  }
+
+  // The arms are WIDE, not tall. The port had them as 8x30 verticals, which is
+  // the one error that survives a scale fix and still looks wrong.
+  const ua = rig.parts.upperArm.cell;
+  if (ua[0] <= ua[1]) throw new Error(`ragdoll: upperArm ${ua} should be wider than tall`);
+
+  // The torso cell must NOT still contain the backpack: FFDec bakes that
+  // overlay at frame 1, so a wide body cell means it was welded on.
+  if (rig.parts.body.cell[0] > 40) {
+    throw new Error(`ragdoll: body cell ${rig.parts.body.cell} still carries the ability overlay`);
+  }
+  if (!rig.abilityOffset) throw new Error("ragdoll: ability attach offset not recorded");
+
+  console.log(
+    `ragdoll: 8 Phys* parts x ${rig.frames.length} skins, assembled ~${standing}px, ` +
+    "hitboxes derived from art (0.8x), backpack re-attached at " +
+    `(${rig.abilityOffset[0]},${rig.abilityOffset[1]})`,
   );
 }
 

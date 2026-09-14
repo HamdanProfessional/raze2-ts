@@ -8,8 +8,15 @@
  * rides the generic `relay` channel.
  *
  * Connection URL resolution, in order:
- *   1. `import.meta.env.VITE_MP_URL`  (set for a deployed server),
- *   2. `ws://<page-host>:8787`        (dev default — server on the same box).
+ *   1. `import.meta.env.VITE_MP_URL`   (explicit override),
+ *   2. `wss://<page-host>/raze-ws`     (page served over TLS — see below),
+ *   3. `ws://<page-host>:8787`         (dev default — server on the same box).
+ *
+ * Rule 2 exists because rule 3 cannot work in production: a page on https may
+ * not open a `ws://` socket (mixed content, blocked before it leaves the tab),
+ * and the relay's port isn't exposed publicly anyway. The deployment fronts it
+ * with nginx at the same origin under `/raze-ws`, so a TLS page derives its own
+ * URL and no build-time env var is needed to ship a working client.
  */
 import {
   DEFAULT_PORT,
@@ -42,11 +49,16 @@ interface NetEvents {
 
 type EventName = keyof NetEvents;
 
-function resolveUrl(): string {
+/** Path nginx proxies to the relay on a TLS deployment. */
+export const WS_PATH = "/raze-ws";
+
+export function resolveUrl(): string {
   const env = (import.meta as any).env?.VITE_MP_URL as string | undefined;
   if (env) return env;
-  const host = typeof location !== "undefined" ? location.hostname || "localhost" : "localhost";
-  return `ws://${host}:${DEFAULT_PORT}`;
+  if (typeof location === "undefined") return `ws://localhost:${DEFAULT_PORT}`;
+  const host = location.host || `localhost:${DEFAULT_PORT}`;
+  if (location.protocol === "https:") return `wss://${host}${WS_PATH}`;
+  return `ws://${location.hostname || "localhost"}:${DEFAULT_PORT}`;
 }
 
 class NetClient {

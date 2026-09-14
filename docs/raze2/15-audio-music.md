@@ -245,8 +245,19 @@ them, and `Beep` survives only as an alias for three remaining generic sites. `S
 
 Both the semantic `S_*` linkage names and the legacy keys resolve, so a call site may use either.
 
-**Remaining, summarized:**
-1. Music crossfade is a hard cut rather than a ~1.2s fade.
-2. No in-match manual song-skip button.
-3. `S_CamelJizz` (a title-screen Easter egg) is extracted but has no trigger — the Easter egg
-   itself is not ported.
+**Remaining, summarized (updated 2026-09-14 — all three were closed):**
+1. ~~Music crossfade is a hard cut rather than a ~1.2s fade.~~ `Sound.setMusic()`
+   now crossfades exactly like `SH.playMusic`/`SH.EnterFrame`: the outgoing track
+   slides onto its own gain and ramps out at `0.025`/frame (40 frames ≈ 1.33s)
+   while the replacement ramps up over the same window; `stopMusic()` fades too.
+2. ~~No in-match manual song-skip button.~~ The HUD now shows `txt_songname`
+   ("Song: …") and a clickable "Play Next Song" in quick matches
+   (`Hud.buildSongControls`), wired to `Sound.playNextSong()` which walks
+   `R2_SONGS` — the authentic `SH.songList`/`songNames` order with wrapping.
+   Campaign matches leave both blank, as `Hud.as:195-198` does.
+3. ~~`S_CamelJizz` has no trigger — the Easter egg itself is not ported.~~ The
+   `Intro` timeline is ported (`IntroScreen`): the 393-frame `DefineSprite_1846`
+   splash is baked to `public/assets/intro/intro.webm` by
+   `tools/ui/bake_intro.py`, the frame clock fires `R2_CamelJizz` on frame 1 and
+   `R2_MenuIntro` on frame 40, and Loader → Intro → Menu matches
+   `Main.renderDone()` → `Menu(Menu, {"noMusic":true})`. Click/Esc skips.

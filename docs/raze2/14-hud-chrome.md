@@ -365,18 +365,29 @@ reuse for all restyled panels:
 
 ## Port status
 
+> **This table was written before the HUD rebuild and is stale.** Verified against the
+> code on 2026-09-14: the health/shield/energy cluster (baked `heartbeat` plate + the
+> 30-sample EKG morph, yellow shield and purple energy columns), the weapon rack (7 slots
+> @ 65 SWF px, authentic holder/highlight art), the credits footer, the kill feed, the
+> crosshair bloom, the nameplate bars (`bar_hp`/`bar_back`/`bar_hurt` with the 5%/frame
+> damage sliver), the pause/options/scores plates and the shared button/panel kit are all
+> implemented; there is no minimap (removed — it was never in the source). A quick-match
+> song caption + "Play Next Song" was added on 2026-09-14 (`Hud.buildSongControls`,
+> `Hud.as:191-221`/`Player.as:174`). Treat the rows below as historical notes only.
+
 | Area | Status | Notes |
 |---|---|---|
-| Health/shield/ammo cluster | **missing** | `src/game/Hud.ts` has an ammo readout and weapon strip, but no ECG-style `heartbeat` widget, no yellow shield bar, no purple energy bar, no blood-screen alpha ramp. Needs the hp→colour ramp formula from `Hud.as:357-361` and the shield/energy bar dimensions (33px / 130px max). |
-| Weapon loadout strip | **partially implemented** | `Hud.ts` builds weapon slots with a "colour chip along the slot's top edge" (`src/game/Hud.ts:1165`) — this is a **port invention**, not in the original (original uses a yellow ammo-bar tint + `weapon.alpha` dimming only, no per-class colour chip). Slot pitch/count (7 slots @ 65px) should be verified against `src/game/Hud.ts` layout constants. |
-| Credits bar | **present but unverified formatting** | Confirm `txt_points`/`txt_pointsearn` equivalents exist and match the "cr" suffix + comma-grouping (`UT.addNumCommas`). |
-| Kill feed | **present** (`killFeedRoot`/`KillMsg` in `Hud.ts`) | Verify the 3-colour scheme (teammate `#99FFFF`, enemy `#FF9999`, self `#33FFFF`, weapon `#CCCCCC`) and 13-line cap are matched. |
-| Crosshair | **present**, referenced in `Hud.ts` comments | Verify it reproduces the *dynamic bloom* (4 lines spreading with recoil) rather than a static reticle, and that it is single-style (no per-weapon crosshair — none exists in source). |
-| Minimap / radar | **wrong — extra feature** | `src/game/Hud.ts:296,465-467` implements a `Minimap` class with a Low-quality profile toggle. **The original Raze 2 HUD has no minimap at all.** This is a port addition; flag for design sign-off (keep as an enhancement, or remove for pixel-fidelity). |
-| Damage indicator | **missing / N/A** | Not in the original; no action needed unless intentionally adding one. |
-| Streak banners | **missing / N/A (by design)** | Original has no streak-banner widget; multi-kill bonuses surface via world-space `KillPoints` popups + the corner `display_num`/`display_text` clips. If the port wants streak banners it is a new feature, not a port gap. |
-| Nameplate health bar (over units) | **not found in port** | No `bar_hp`/`backbar_hp`/`bar_hurt`/`bar_en` equivalent located under `src/game/`. This is the actual source of the "blue/orange segmented bar" — needs implementing: 75px-wide continuous bar, team-coloured front + darker back + red damage-flash sliver easing at 5%/frame. |
-| Pause menu | **wrong/placeholder** | `src/game/GameScreen.ts:925-991` is a generic 2-button (`RESUME`/`QUIT TO MENU`) rounded-rect panel with an orange stroke and Impact-font title — no relation to the original's dark-glass/vignette full-screen menu, no `View Scores`/`Options` buttons, no hover state-machine, wrong font (uses `monospace`/`Impact` instead of BlairMdITC TT). Needs a full rebuild per §3. |
-| Options screen | **missing entirely** | No file under `src/screens/` implements Graphic Presets/Details or Other Options. `src/state/Quality.ts` may hold the underlying settings model — confirm it maps to `SD.graphQual/graphPart/graphGlow/graphRagev/graphLights` semantics in §4 before wiring UI. |
-| View Scores / scoreboard | **missing entirely** | No scoreboard table implementation found. Needs the column set, team-colour row backgrounds, dimmed-AI-row alpha (0.7), and skull/status icon frames from §5. |
-| Shared button/panel style | **not established** | No reusable "dark-glass panel + accent" component exists yet in the port; §6 token table should become the base style for Pause/Options/Scores and any future chrome. |
+| Health/shield/ammo cluster | **done** (stale row said missing) | `Hud.ts` heartbeat monitor, shield/energy columns, ammo ticks, blood-screen ramp. |
+| Weapon loadout strip | **done** (stale row said partial) | 7 slots at the source pitch, original holder/highlight art, yellow selected tint. |
+| Credits bar | **done** | "Earned / Credits / Total" footer with `cr` suffix + comma grouping. |
+| Kill feed | **done** | 3-colour scheme and 13-line cap. |
+| Crosshair | **done** | Single dynamic-bloom reticle. |
+| Minimap / radar | **removed** | Source has none; the port's old `Minimap` class is gone. |
+| Damage indicator | **port addition** | Not in the original; kept as a readability cue. |
+| Streak banners | **N/A (by design)** | Multi-kill bonuses surface via `KillPoints` popups. |
+| Nameplate health bar (over units) | **done** (stale row said not found) | `Unit.ts` draws the team-coloured bar + damage sliver. |
+| Pause menu | **done** (stale row said placeholder) | Baked `pause_*` plates and the original button coordinates. |
+| Options screen | **done** (stale row said missing) | `src/screens/OptionsScreen.ts` + the in-pause options tab. |
+| View Scores / scoreboard | **done** (stale row said missing) | `src/screens/ScoresScreen.ts` + the pause overlay rows. |
+| Shared button/panel style | **done** | `src/ui/raze2/*` (`Raze2Button`, `Raze2Panel`, palette) is the shared kit. |
+| Song caption + "Play Next Song" | **done 2026-09-14** | Top-left in quick matches; hidden in campaign. |

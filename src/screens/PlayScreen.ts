@@ -7,11 +7,15 @@ import { UiArt } from "../assets/UiArt";
 import { Backgrounds } from "../assets/Backgrounds";
 import { LEVELS, preloadLevel } from "../game/Arena";
 import { loadoutGuns } from "../game/Armory";
+import { creditMod } from "../game/KillBonus";
 import { GameScreen } from "../game/GameScreen";
 import { MenuScreen } from "./MenuScreen";
 import { ArmoryScreen } from "./ArmoryScreen";
 import { MultiplayerScreen } from "./MultiplayerScreen";
-import { makeBackground, makeScrim, makeVeil } from "./ui";
+import {
+  makeBackground, makeScrim, addScreenChrome, type ScreenChrome, makeVeil,
+  TITLE_SIZE, TITLE_Y,
+} from "./ui";
 import {
   Raze2Button,
   Raze2Panel,
@@ -137,6 +141,15 @@ const ONOFF = ["Off", "On"];
  *  the team colour family the scoreboard and HUD use. */
 const TEAM_COLORS = [0x5aa0ff, 0xff8a3a, 0xf2d16b, 0x7fd39a];
 
+/** `txt_playername` — the roster box's name row: pale yellow, panel-local
+ *  (41.8, 92.4), i.e. `mc_bots` (467.3, 111.8) + the field's (9.5, 36.6). */
+const C_PLAYERNAME = 0xffff99;
+const ROSTER_NAME_X = 41.8;
+const ROSTER_NAME_Y = 92.4;
+
+/** `txt_warning` ink colour (#ff9999 in the source). */
+const C_WARNING = 0xff9999;
+
 /** Real Raze 2 map names + descriptions (doc 09 §2.3, recovered from
  *  `Stats_Maps.as`'s p-code) for the `LEVELS` entries that correspond to
  *  canonical Raze 2 arenas. The Raze-1-only / sandbox entries have no Raze 2
@@ -237,6 +250,10 @@ const ARROW_BOX = 24;
  *  overflow into the left chevron. */
 const CLUSTER_W = 220;
 
+/** Left edge of the settings-row value fields (`txt_type`/`txt_score`/… all
+ *  share SWF x 253.5), in the left panel's crop-local space. */
+const VALUE_X = 253.5;
+
 export class PlayScreen extends Screen {
   private levelIdx = DEFAULT_LEVEL_IDX;
   private modeIdx = DEFAULT_MODE_IDX;
@@ -258,9 +275,15 @@ export class PlayScreen extends Screen {
   private mapImg!: Container;
   private mapTitle!: Text;
   private mapDesc!: Text;
+  /** Edge-anchored chrome (header / left panel / right panel). */
+  private chrome!: ScreenChrome;
+  /** Per-team roster overlays for team modes 2..4 (team 0 uses the baked row). */
+  private teamExtra = new Container();
+  private rosterCover!: Graphics;
 
   private modeValue!: Text;
   private modeDescText!: Text;
+  private warningText!: Text;
   private scoreLabel!: Text;
   private scoreValue!: Text;
   private weaponsValue!: Text;
@@ -271,294 +294,261 @@ export class PlayScreen extends Screen {
   private diffValue!: Text;
   private rosterTitle!: Text;
   private rosterCount!: Text;
-  private rosterSubline!: Text;
   private addTeamBtn!: Raze2Button;
-  /** Repainted slot rows (player + bots) inside the roster panel. */
-  private rosterRows = new Container();
-  private rosterRowW = 0;
-  private rosterRowsH = 0;
 
   constructor(...args: ConstructorParameters<typeof Screen>) {
     super(...args);
 
-    // The reference screenshot's backdrop is a bright painted vista, not the
-    // flat dark grid the port previously used here — per-level gameplay art
-    // (tried and reverted) is mostly black negative space and reads worse,
-    // not better, stretched fullscreen. `menu.jpg` (the same warm sunset
-    // skyline the Menu/Campaign chrome uses) is the closest available asset
-    // in tone/brightness, so Quick Match now shares it with a lighter scrim
-    // instead of the near-opaque black wash.
+    // Edge-anchored chrome: the header strip stretches across the stage, the
+    // map/settings column pins left, the roster pins right — so the layout
+    // follows the window instead of sitting in an 800x600 box. Only the live
+    // values and hit areas are created here.
     this.view.addChild(makeBackground(UiArt.getTexture("menu"), 0x0d1014));
-    this.view.addChild(makeScrim(0x000000, 0.25));
+    this.view.addChild(makeScrim(0x05070c, 0.45));
+    this.chrome = addScreenChrome(this.view, {
+      headerL: "qm_header_l", headerR: "qm_header_r",
+      left: "qm_left",
+      rightStretch: { l: "qm_right_l", m: "qm_right_m", r: "qm_right_r" },
+      // The roster column stretches, so past the authored 800 the team band
+      // becomes a long empty bar and the difficulty stepper — pinned to its
+      // right end — drifts away from the Players stepper it pairs with.
+      maxW: 800,
+    });
 
-    // Title and the top-right helper share one centre line (HEADER_CY) so they
-    // read as a single bar; top-aligning two different font sizes did not.
-    this.header("QUICK MATCH", 60, HEADER_CY);
-    this.buildWhatIsThis(HEADER_CY);
-
+    this.buildHeader();
     this.buildMapPreview();
     this.buildSettings();
     this.buildAddTeamAndRoster();
     this.buildBottomBar();
 
     this.refreshMap();
+    this.refreshLimit();
+    this.refreshValues();
+    this.refreshRoster();
   }
 
-  /** Screen title, vertically centred on `cy`. */
-  private header(text: string, x: number, cy: number): void {
+  /** Paint every runtime value from the current indices. */
+  private refreshValues(): void {
+    this.modeValue.text = this.mt.label;
+    this.modeDescText.text = this.mt.desc;
+    this.weaponsValue.text = WEAPONS[this.weaponsIdx];
+    this.specialValue.text = this.specials[this.specialIdx];
+    this.abilitiesValue.text = ONOFF[this.abilitiesIdx];
+    this.equipsValue.text = ONOFF[this.equipsIdx];
+    this.refreshWarning();
+  }
+
+  /**
+   * `txt_warning`: the red line under the settings block that quotes the credit
+   * penalty the current weapon/special-mode restrictions carry. `creditMod`
+   * already models it (`Menu.as:1998-2068`) — the field just had no text.
+   */
+  private refreshWarning(): void {
+    const mod = creditMod({
+      weaponsUsed: WEAPONS[this.weaponsIdx],
+      specialMode: this.specials[this.specialIdx],
+      level: LEVELS[this.levelIdx]?.id,
+    });
+    const pct = Math.round((mod - 1) * 100);
+    this.warningText.text = pct < 0
+      ? `Warning: With these settings, you will earn ${pct}% credits.`
+      : "";
+  }
+
+  /** Transparent click target (the baked chrome draws the visuals). */
+  private zone(
+    parent: Container,
+    x: number, y: number, w: number, h: number,
+    onClick: () => void, hover = true,
+  ): Graphics {
+    const g = new Graphics();
+    g.rect(x - w / 2, y - h / 2, w, h).fill({ color: 0x000000, alpha: 0.001 });
+    g.eventMode = "static";
+    g.cursor = "pointer";
+    if (hover) g.on("pointerover", () => Sound.play("R2_Click"));
+    g.on("pointertap", onClick);
+    parent.addChild(g);
+    return g;
+  }
+
+  /** Screen title (`txt_title`, centred on the stretched header strip).
+   *
+   *  `headerRoot` is already scaled by `chrome.s`, so the point size is the
+   *  SWF's own — multiplying by `s` a second time rendered the title ~40%
+   *  oversized (27 SWF px against the authored 19.93). */
+  private buildHeader(): void {
     const t = new Text({
-      text,
+      text: "QUICK MATCH",
       style: new TextStyle({
-        fill: C_HEADER,
-        fontFamily: FONT_HEADER,
-        fontSize: 30,
-        fontWeight: "700",
-        letterSpacing: 3,
+        fill: C_HEADER, fontFamily: FONT_HEADER, fontSize: TITLE_SIZE,
+        fontWeight: "700", letterSpacing: 3,
       }),
     });
-    t.anchor.set(0, 0.5);
+    t.anchor.set(0.5, 0);
     t.alpha = A_HEADER;
-    t.x = x;
-    t.y = cy;
-    this.view.addChild(t);
-  }
-
-  /** Top-right "What is this ?" helper (doc 09 screenshot #4). Colour-swap
-   *  only — the real dialog content could not be recovered from the
-   *  decompiled AS3 (doc 09 §3, no matching Menu.as string/trigger found). */
-  private buildWhatIsThis(cy: number): void {
-    const help = new Text({
-      text: "What is this  ?",
-      style: new TextStyle({ fill: C_LABEL, fontFamily: FONT_VALUE, fontSize: 15, letterSpacing: 1 }),
-    });
-    help.anchor.set(1, 0.5);
-    help.alpha = A_LABEL;
-    help.x = GAME_WIDTH - 60;
-    help.y = cy;
-    help.eventMode = "static";
-    help.cursor = "pointer";
-    help.on("pointerover", () => {
-      help.style.fill = C_OPTIONS_GREEN;
-      Sound.play("R2_Click");
-    });
-    help.on("pointerout", () => (help.style.fill = C_LABEL));
-    this.view.addChild(help);
+    t.x = Math.round(this.chrome.stageW / (2 * this.chrome.s));
+    t.y = TITLE_Y;
+    this.chrome.headerRoot.addChild(t);
   }
 
   // --- map preview (left, top) --------------------------------------------
 
   private buildMapPreview(): void {
-    const x = 60;
-    const y = 90;
-    const w = 440;
-    const h = 230;
+    // The left panel is anchored to the left edge; coordinates here are the
+    // panel crop's SWF-local space (origin = SWF (0,56)).
+    const root = this.chrome.leftRoot;
 
-    const panel = new Raze2Panel(w, h, { accent: C_OPTIONS_GREEN });
-    panel.view.x = x;
-    panel.view.y = y;
-    this.view.addChild(panel.view);
-
-    const imgW = 400;
-    const imgH = 130;
     this.mapImg = new Container();
-    this.mapImg.x = x + 20;
-    this.mapImg.y = y + 20;
-    this.view.addChild(this.mapImg);
+    this.mapImg.x = 49.9;
+    this.mapImg.y = 19.1;
+    root.addChild(this.mapImg);
 
-    // Faint Prev / Next chevrons straddling the image itself, vertically
-    // centred on it (reference screenshot shows these as a subtle hover
-    // affordance on the image edges, distinct from the text labels below).
-    // Centred on the image's own left/right edges, so the pair is symmetric
-    // about the panel instead of the left one sitting 11px further in.
-    const arrowY = y + 20 + imgH / 2;
-    this.view.addChild(this.arrow("‹", x + 20, arrowY, () => this.cycleMap(-1)));
-    this.view.addChild(this.arrow("›", x + w - 20, arrowY, () => this.cycleMap(1)));
+    this.zone(root, 69.6, 118, 34, 80, () => this.cycleMap(-1));
+    this.zone(root, 391.1, 118, 34, 80, () => this.cycleMap(1));
 
-    // "Prev  <Map Name>  Next" row directly under the image — matches the
-    // reference layout (small caps Prev/Next flanking the bold centred map
-    // title), rather than just a left-aligned heading.
-    // All three share `rowCy` as their vertical centre rather than each being
-    // nudged by a hand-tuned offset off a common top edge.
-    const rowY = y + 20 + imgH + 10;
-    const rowCy = rowY + 12;
-    const prevLabel = new Text({
-      text: "Prev",
-      style: new TextStyle({ fill: C_LABEL, fontFamily: FONT_VALUE, fontSize: 13, letterSpacing: 1 }),
-    });
-    prevLabel.anchor.set(0, 0.5);
-    prevLabel.alpha = A_LABEL;
-    prevLabel.x = x + 20;
-    prevLabel.y = rowCy;
-    prevLabel.eventMode = "static";
-    prevLabel.cursor = "pointer";
-    prevLabel.on("pointertap", () => this.cycleMap(-1));
-    prevLabel.on("pointerover", () => (prevLabel.style.fill = C_OPTIONS_GREEN));
-    prevLabel.on("pointerout", () => (prevLabel.style.fill = C_LABEL));
-    this.view.addChild(prevLabel);
-
-    const nextLabel = new Text({
-      text: "Next",
-      style: new TextStyle({ fill: C_LABEL, fontFamily: FONT_VALUE, fontSize: 13, letterSpacing: 1 }),
-    });
-    nextLabel.anchor.set(1, 0.5);
-    nextLabel.alpha = A_LABEL;
-    nextLabel.x = x + w - 20;
-    nextLabel.y = rowCy;
-    nextLabel.eventMode = "static";
-    nextLabel.cursor = "pointer";
-    nextLabel.on("pointertap", () => this.cycleMap(1));
-    nextLabel.on("pointerover", () => (nextLabel.style.fill = C_OPTIONS_GREEN));
-    nextLabel.on("pointerout", () => (nextLabel.style.fill = C_LABEL));
-    this.view.addChild(nextLabel);
-
+    // `txt_maptitle`: QTypeSquare-Book 12.8, plain — the same face the "Prev" /
+    // "Next" labels beside it are baked in, so it shares their baseline. It was
+    // using the BlairMdITC header face at 15/700, which rendered a small-caps
+    // "DOME" a line lower than the labels it sits between.
     this.mapTitle = new Text({
       text: "",
       style: new TextStyle({
-        fill: C_HEADER,
-        fontFamily: FONT_HEADER,
-        fontSize: 20,
-        fontWeight: "700",
-        letterSpacing: 1,
+        fill: C_HEADER, fontFamily: FONT_VALUE, fontSize: 12.8,
       }),
     });
-    this.mapTitle.anchor.set(0.5);
     this.mapTitle.alpha = A_HEADER;
-    this.mapTitle.x = x + w / 2;
-    this.mapTitle.y = rowCy;
-    this.view.addChild(this.mapTitle);
+    // Centred on the field (SWF x 119.8..333.0), not on the panel.
+    this.mapTitle.anchor.set(0.5, 0);
+    this.mapTitle.x = 226.4;
+    this.mapTitle.y = 151.2;
+    root.addChild(this.mapTitle);
 
+    // `txt_mapdesc` is 365.85 wide (SWF x 49.0..414.8) and holds three lines in
+    // 44px. Wrapping at 410 ran the copy past the panel's right edge.
     this.mapDesc = new Text({
       text: "",
       style: new TextStyle({
-        fill: C_HEADER,
-        fontFamily: FONT_BODY,
-        fontSize: 12,
-        wordWrap: true,
-        wordWrapWidth: imgW,
-        lineHeight: 16,
+        fill: C_HEADER, fontFamily: FONT_BODY, fontSize: 12,
+        wordWrap: true, wordWrapWidth: 365.85, lineHeight: 14.65,
       }),
     });
     this.mapDesc.alpha = A_BODY;
-    this.mapDesc.x = x + 20;
-    this.mapDesc.y = rowY + 30;
-    this.view.addChild(this.mapDesc);
+    this.mapDesc.x = 49;
+    this.mapDesc.y = 171.4;
+    root.addChild(this.mapDesc);
   }
 
   private cycleMap(dir: number): void {
     Sound.play("R2_Click");
     this.levelIdx = (this.levelIdx + dir + LEVELS.length) % LEVELS.length;
     this.refreshMap();
+    this.refreshWarning();
   }
 
   private refreshMap(): void {
     const lvl = LEVELS[this.levelIdx];
     const info = mapInfo(lvl.id, lvl.name);
     this.mapImg.removeChildren();
-    const w = 400;
-    const h = 130;
-    const tex = Backgrounds.getThumb(lvl.id);
-    if (tex) {
-      const s = new Sprite(tex);
-      s.width = w;
-      s.height = h;
-      this.mapImg.addChild(s);
+    // The original `img_map` still (frame label = `Stats_Maps` id) when baked,
+    // the port's rendered thumb otherwise.
+    const shot = UiArt.r2Sprite(`map_${String(lvl.id).replace(/^r2_/, "")}`);
+    if (shot) {
+      this.mapImg.addChild(shot);
     } else {
-      const g = new Graphics();
-      g.rect(0, 0, w, h).fill({ color: 0x101820, alpha: 0.9 });
-      this.mapImg.addChild(g);
+      const tex = Backgrounds.getThumb(lvl.id);
+      if (tex) {
+        const s = new Sprite(tex);
+        s.width = 360.44;
+        s.height = 128;
+        this.mapImg.addChild(s);
+      } else {
+        const g = new Graphics();
+        g.rect(0, 0, 360.44, 128).fill({ color: 0x101820, alpha: 0.9 });
+        this.mapImg.addChild(g);
+      }
     }
-    const frame = new Graphics();
-    frame.rect(0, 0, w, h).stroke({ color: C_OPTIONS_GREEN, width: 1, alpha: 0.6 });
-    this.mapImg.addChild(frame);
     this.mapTitle.text = info.title;
     this.mapDesc.text = info.desc;
   }
 
   // --- match settings (left, below map preview) ---------------------------
 
-  private buildSettings(): void {
-    const x = 60;
-    const y = 330;
-    const w = 440;
-    const h = GAME_HEIGHT - 52 - 20 - y;
-
-    const panel = new Raze2Panel(w, h, { accent: C_OPTIONS_GREEN });
-    panel.view.x = x;
-    panel.view.y = y;
-    this.view.addChild(panel.view);
-
-    const title = new Text({
-      text: "MATCH SETTINGS",
-      style: new TextStyle({
-        fill: C_HEADER,
-        fontFamily: FONT_HEADER,
-        fontSize: 16,
-        fontWeight: "700",
-        letterSpacing: 2,
-      }),
+  /** One runtime value line, in the left panel's SWF-local coordinates. */
+  private valueAt(x: number, y: number, size = 13): Text {
+    const t = new Text({
+      text: "",
+      style: new TextStyle({ fill: C_VALUE, fontFamily: FONT_VALUE, fontSize: size }),
     });
-    title.alpha = A_HEADER;
-    title.x = x + 20;
-    title.y = y + 14;
-    this.view.addChild(title);
+    t.alpha = A_VALUE;
+    t.x = x;
+    t.y = y;
+    this.chrome.leftRoot.addChild(t);
+    return t;
+  }
 
-    const lx = x + 20;
-    const lw = w - 40;
-
-    // Six rows plus the italic rules line, spread evenly over the panel's
-    // usable height instead of stacked on a fixed 27px pitch that left a hole
-    // at the bottom.
-    const rowsTop = y + 44;
-    const rowsBottom = y + h - 14;
-    const DESC_H = 28;
-    const step = Math.floor((rowsBottom - rowsTop - DESC_H) / 6);
-    let ly = rowsTop;
-
-    this.modeValue = this.stepper(lx, ly, lw, "Match Type", () => this.mt.label,
-      () => this.cycleMode(-1), () => this.cycleMode(1));
-
+  private buildSettings(): void {
+    // Values (`txt_type`, `txt_score`, `txt_weaps`, `txt_special`,
+    // `txt_abilities`, `txt_equips`) and the stepper hit zones. The arrows,
+    // labels and rules line are baked into the left panel. Values sit at the
+    // fields' rendered ink column (origin + ~33px inset), like the campaign
+    // screen.
+    const root = this.chrome.leftRoot;
+    this.modeValue = this.valueAt(VALUE_X, 239.6);
+    // `txt_typedesc`: plain Calibri 12 in a 357.5-wide field, not an italic 11.
     this.modeDescText = new Text({
-      text: this.mt.desc,
+      text: "",
       style: new TextStyle({
-        fill: C_LABEL,
-        fontFamily: FONT_BODY,
-        fontStyle: "italic",
-        fontSize: 11,
-        wordWrap: true,
-        wordWrapWidth: lw,
-        lineHeight: 13,
+        fill: C_LABEL, fontFamily: FONT_BODY,
+        fontSize: 12, wordWrap: true, wordWrapWidth: 357.5, lineHeight: 14.65,
       }),
     });
     this.modeDescText.alpha = A_BODY;
-    this.modeDescText.x = lx;
-    this.modeDescText.y = ly + ROW_H + 2;
-    this.view.addChild(this.modeDescText);
-    ly += step + DESC_H;
+    this.modeDescText.x = 54.6;
+    this.modeDescText.y = 263.4;
+    root.addChild(this.modeDescText);
 
-    // Kills to Win / Lives / Points to Win (label + value both vary by type).
-    this.scoreLabel = this.rowLabel(this.mt.scoreLabel, lx, ly);
-    this.scoreValue = this.stepperValue(lx, ly, lw,
-      () => this.cycleLimit(-1), () => this.cycleLimit(1));
-    ly += step;
+    // `txt_warning` (SWF x 54.6, y 487.3, Calibri 12, #ff9999).
+    this.warningText = new Text({
+      text: "",
+      style: new TextStyle({
+        fill: C_WARNING, fontFamily: FONT_BODY,
+        fontSize: 12, wordWrap: true, wordWrapWidth: 357.5, lineHeight: 14.65,
+      }),
+    });
+    this.warningText.alpha = A_HEADER;
+    this.warningText.x = 54.6;
+    this.warningText.y = 431.3;
+    root.addChild(this.warningText);
 
-    this.weaponsValue = this.stepper(lx, ly, lw, "Weapons", () => WEAPONS[this.weaponsIdx],
-      () => this.cyclePicker("weaponsIdx", WEAPONS.length, -1, this.weaponsValue, WEAPONS),
-      () => this.cyclePicker("weaponsIdx", WEAPONS.length, 1, this.weaponsValue, WEAPONS));
-    ly += step;
+    this.scoreLabel = this.valueAt(52.3, 294.6);
+    this.scoreValue = this.valueAt(VALUE_X, 295.6);
+    this.weaponsValue = this.valueAt(VALUE_X, 323.6);
+    this.specialValue = this.valueAt(VALUE_X, 351.6);
+    this.abilitiesValue = this.valueAt(VALUE_X, 379.6);
+    this.equipsValue = this.valueAt(VALUE_X, 407.6);
 
-    this.specialValue = this.stepper(lx, ly, lw, "Special Mode", () => this.specials[this.specialIdx],
-      () => this.cyclePicker("specialIdx", this.specials.length, -1, this.specialValue, this.specials),
-      () => this.cyclePicker("specialIdx", this.specials.length, 1, this.specialValue, this.specials));
-    ly += step;
-
-    this.abilitiesValue = this.stepper(lx, ly, lw, "Abilities", () => ONOFF[this.abilitiesIdx],
-      () => this.cyclePicker("abilitiesIdx", ONOFF.length, -1, this.abilitiesValue, ONOFF),
-      () => this.cyclePicker("abilitiesIdx", ONOFF.length, 1, this.abilitiesValue, ONOFF));
-    ly += step;
-
-    this.equipsValue = this.stepper(lx, ly, lw, "Equipment", () => ONOFF[this.equipsIdx],
-      () => this.cyclePicker("equipsIdx", ONOFF.length, -1, this.equipsValue, ONOFF),
-      () => this.cyclePicker("equipsIdx", ONOFF.length, 1, this.equipsValue, ONOFF));
+    // Stepper chevrons: `bt_<row>_prev/next` at x=194.2 / 410.4 (frame 37).
+    const ZW = 44, ZH = 26;
+    this.zone(root, 194.2, 234.4, ZW, ZH, () => this.cycleMode(-1));
+    this.zone(root, 410.4, 234.4, ZW, ZH, () => this.cycleMode(1));
+    this.zone(root, 194.2, 290.4, ZW, ZH, () => this.cycleLimit(-1));
+    this.zone(root, 410.4, 290.4, ZW, ZH, () => this.cycleLimit(1));
+    this.zone(root, 194.2, 318.4, ZW, ZH, () =>
+      this.cyclePicker("weaponsIdx", WEAPONS.length, -1, this.weaponsValue, WEAPONS));
+    this.zone(root, 410.4, 318.4, ZW, ZH, () =>
+      this.cyclePicker("weaponsIdx", WEAPONS.length, 1, this.weaponsValue, WEAPONS));
+    this.zone(root, 194.2, 346.4, ZW, ZH, () =>
+      this.cyclePicker("specialIdx", this.specials.length, -1, this.specialValue, this.specials));
+    this.zone(root, 410.4, 346.4, ZW, ZH, () =>
+      this.cyclePicker("specialIdx", this.specials.length, 1, this.specialValue, this.specials));
+    this.zone(root, 194.2, 374.4, ZW, ZH, () =>
+      this.cyclePicker("abilitiesIdx", ONOFF.length, -1, this.abilitiesValue, ONOFF));
+    this.zone(root, 410.4, 374.4, ZW, ZH, () =>
+      this.cyclePicker("abilitiesIdx", ONOFF.length, 1, this.abilitiesValue, ONOFF));
+    this.zone(root, 194.2, 402.4, ZW, ZH, () =>
+      this.cyclePicker("equipsIdx", ONOFF.length, -1, this.equipsValue, ONOFF));
+    this.zone(root, 410.4, 402.4, ZW, ZH, () =>
+      this.cyclePicker("equipsIdx", ONOFF.length, 1, this.equipsValue, ONOFF));
 
     this.refreshLimit();
   }
@@ -605,97 +595,75 @@ export class PlayScreen extends Screen {
     Sound.play("R2_Click");
     this[field] = (this[field] + dir + len) % len;
     value.text = labels[this[field]];
+    // Weapons and Special Mode both dock credits, so the warning re-reads.
+    this.refreshWarning();
   }
 
   // --- add team + roster (right) ------------------------------------------
 
   private buildAddTeamAndRoster(): void {
-    const x = 560;
-    const w = GAME_WIDTH - x - 60;
+    // Right panel, stretched from the left column to the stage edge (the
+    // source's 435..800 roster region). Coordinates are the panel's SWF-local
+    // space; the pieces that sat at its right end are pinned to `rightW`.
+    const root = this.chrome.rightRoot;
+    const RW = this.chrome.rightW;
+    this.zone(root, 101.5, 15.8, 130, 32, () => this.addTeam());
+    this.zone(root, RW - 73.5, 15.8, 130, 32, () => this.removeTeam());
 
-    // "Add Team" cycles the team count within the current type's
-    // teamsMin/teamsMax bounds (doc 09 §2.4); disabled where those bounds
-    // collapse to a single value (Juggernaught = FFA-only, CTF = locked at 2).
-    // (Labelled without the "+" glyph — the embedded BlairMdITC subset renders
-    // that codepoint as a stray "1" — see the button label, not a logic bug.)
-    const addTeam = new Raze2Button("Add Team", {
-      width: 220,
-      height: 32,
-      onClick: () => this.addTeam(),
-    });
-    addTeam.view.x = x;
-    addTeam.view.y = 90;
-    addTeam.view.on("pointerover", () => Sound.play("R2_Click"));
-    this.view.addChild(addTeam.view);
-    this.addTeamBtn = addTeam;
+    // Cover the baked "Free For All" caption (its ink sits in the box header,
+    // local y ~54..80) so a team-mode title can replace it; FFA leaves the
+    // baked caption untouched (we draw nothing).
+    this.rosterCover = new Graphics();
+    this.rosterCover.rect(30, 54, 200, 26).fill({ color: 0x1b1b1b, alpha: 0.9 });
+    root.addChild(this.rosterCover);
 
-    // The roster panel runs to the same baseline as the left column's Match
-    // Settings panel; it used to stop at 368 and leave a 200px hole above the
-    // bottom bar.
-    const rosterY = 138;
-    const rosterH = GAME_HEIGHT - 52 - 20 - rosterY;
-    const panel = new Raze2Panel(w, rosterH, { accent: C_TEAM1 });
-    panel.view.x = x;
-    panel.view.y = rosterY;
-    this.view.addChild(panel.view);
-
-    const title = new Text({
-      text: "FREE FOR ALL",
+    this.rosterTitle = new Text({
+      text: "",
       style: new TextStyle({
-        fill: 0x00ccff,
-        fontFamily: FONT_HEADER,
-        fontSize: 16,
-        fontWeight: "700",
-        letterSpacing: 2,
+        fill: 0x00ccff, fontFamily: FONT_HEADER, fontSize: 13,
+        fontWeight: "700", letterSpacing: 1,
       }),
     });
-    // Title and count sit on one shared centre line; they used to be top-
-    // aligned at different font sizes, which read as a 3px stagger.
-    const headCy = rosterY + 25;
-    title.anchor.set(0, 0.5);
-    title.x = x + 20;
-    title.y = headCy;
-    this.view.addChild(title);
-    this.rosterTitle = title;
+    this.rosterTitle.alpha = A_HEADER;
+    this.rosterTitle.x = 36.5;
+    this.rosterTitle.y = 60.8;
+    root.addChild(this.rosterTitle);
 
-    const count = new Text({
-      text: "",
-      style: new TextStyle({ fill: C_VALUE, fontFamily: FONT_VALUE, fontSize: 14 }),
-    });
-    count.anchor.set(1, 0.5);
-    count.alpha = A_VALUE;
-    count.x = x + w - 20;
-    count.y = headCy;
-    this.view.addChild(count);
-    this.rosterCount = count;
+    const value = (x: number, y: number, size: number): Text => {
+      const t = new Text({
+        text: "",
+        style: new TextStyle({ fill: C_VALUE, fontFamily: FONT_VALUE, fontSize: size }),
+      });
+      t.alpha = A_VALUE;
+      t.x = x;
+      t.y = y;
+      root.addChild(t);
+      return t;
+    };
 
-    const subline = new Text({
-      text: "",
-      style: new TextStyle({ fill: C_LABEL, fontFamily: FONT_BODY, fontSize: 13 }),
-    });
-    subline.alpha = A_BODY;
-    subline.x = x + 20;
-    subline.y = rosterY + 46;
-    this.view.addChild(subline);
-    this.rosterSubline = subline;
+    // `txt0_players` is right-aligned to the box's inner edge (its field ends
+    // at SWF x 778.2 = RW - 21.8), not left-aligned 140px in from it.
+    this.rosterCount = value(RW - 21.8, 60.8, 12);
+    this.rosterCount.anchor.set(1, 0);
 
-    // Slot list: one row per body in the match, filling the panel between the
-    // header and the stepper row.
-    this.rosterRows.x = x + 20;
-    this.rosterRows.y = rosterY + 78;
-    this.view.addChild(this.rosterRows);
-    this.rosterRowW = w - 40;
+    this.teamExtra.x = 0;
+    this.teamExtra.y = 0;
+    root.addChild(this.teamExtra);
 
-    // Players | Difficulty twin stepper row, pinned to the panel's bottom on
-    // the same 20px margin the rest of the panel uses.
-    const rowY = rosterY + rosterH - 20 - ROW_H;
-    this.rosterRowsH = rowY - 16 - this.rosterRows.y;
-    const rowW = w - 40;
-    const halfW = rowW / 2 - 10;
-    this.playersValue = this.stepper(x + 20, rowY, halfW, "Players:", () => String(this.opponents),
-      () => this.stepOpponents(-1), () => this.stepOpponents(1), 130);
-    this.diffValue = this.stepper(x + 20 + halfW + 20, rowY, halfW, "Difficulty:", () => DIFFS[this.diffIdx].label,
-      () => this.cycleDiff(-1), () => this.cycleDiff(1), 130);
+    // Players | Difficulty values sit centred between their baked chevrons
+    // (`bt0_bots_*` / `bt0_diff_*`), not on top of them. Field centres are
+    // `mc_bots` (467.3, 111.8) + the field's own box.
+    this.playersValue = value(140.4, 119.7, 12);
+    this.playersValue.anchor.set(0.5, 0);
+    this.diffValue = value(RW - 67.5, 119.7, 12);
+    this.diffValue.anchor.set(0.5, 0);
+
+    // Team-0 steppers (bt0_bots_* / bt0_diff_*). The players pair stays at the
+    // row's left end; the difficulty pair pins to the stretched panel's right.
+    this.zone(root, 103, 115.7, 36, 22, () => this.stepOpponents(-1));
+    this.zone(root, 175.7, 115.7, 36, 22, () => this.stepOpponents(1));
+    this.zone(root, RW - 116, 115.2, 36, 22, () => this.cycleDiff(-1));
+    this.zone(root, RW - 24.9, 115.2, 36, 22, () => this.cycleDiff(1));
 
     this.refreshRoster();
   }
@@ -712,80 +680,94 @@ export class PlayScreen extends Screen {
     this.refreshRoster();
   }
 
+  /** Cycle the team count downward (the original "Remove Team"). */
+  private removeTeam(): void {
+    const mt = this.mt;
+    if (mt.teamsMin === mt.teamsMax) {
+      Sound.play("R2_Error");
+      return;
+    }
+    Sound.play("R2_Click");
+    this.teamsCount = this.teamsCount <= mt.teamsMin ? mt.teamsMax : this.teamsCount - 1;
+    this.refreshRoster();
+  }
+
   /** Reflect the current type's team model + roster counts (doc 09 §4). */
   private refreshRoster(): void {
     const mt = this.mt;
     if (this.teamsCount <= 1) {
-      this.rosterTitle.text = mt.key === "jug" ? "JUGGERNAUGHT (FFA)" : "FREE FOR ALL";
+      // The baked "Free For All" caption already says it.
+      this.rosterTitle.text = "";
+      this.rosterTitle.visible = false;
+      this.rosterCover.visible = false;
     } else {
-      this.rosterTitle.text = `${this.teamsCount} TEAMS`;
+      this.rosterTitle.visible = true;
+      this.rosterTitle.text = mt.key === "jug" ? "JUGGERNAUGHT" : `${this.teamsCount} TEAMS`;
+      // Size the cover to the title so it reads as a labelled plate rather
+      // than a fixed-width band.
+      this.rosterCover.visible = true;
+      this.rosterCover.clear();
+      this.rosterCover
+        .rect(30, 54, Math.max(120, this.rosterTitle.width + 18), 26)
+        .fill({ color: 0x1b1b1b, alpha: 0.9 });
     }
     const total = Math.min(12, this.opponents + 1);
-    this.rosterCount.text = `${total} / 12 PLAYERS`;
-    this.rosterSubline.text = this.opponents > 0 ? `Player (with ${this.opponents} bot${this.opponents === 1 ? "" : "s"})` : "Player";
-    // Dim "+ Add Team" where the type's bounds leave no room to change teams.
-    this.addTeamBtn.view.alpha = mt.teamsMin === mt.teamsMax ? 0.4 : 1;
+    this.rosterCount.text = `${total} / 12 Players`;
+    this.playersValue.text = String(this.opponents);
+    this.diffValue.text = DIFFS[this.diffIdx].label;
     this.paintRosterRows();
   }
 
   /**
-   * One row per body in the match: the player first, then each bot, tagged with
-   * the team they'd be drafted into (round-robin, as `Match` seats them), then
-   * dim placeholders for the slots the Players stepper could still fill. Fills
-   * the roster panel, which used to be a 200px hole above the bottom bar.
+   * Team composition summary, drawn in the box's name row (`txt_playername`,
+   * `mc_bots`-local (9.5, 36.6) = panel-local (41.8, 92.4), pale yellow
+   * #ffff99). The SWF clones a whole team block per team (`mc_bots` frames
+   * 2..4); the port keeps one compact stretched box, so two teams get a line
+   * each and 3-4 share one.
+   *
+   * Free For All is a row too — the source shows "Player + N bots" there. The
+   * port used to skip it entirely, leaving the baked name plate blank.
    */
   private paintRosterRows(): void {
-    this.rosterRows.removeChildren();
-    const w = this.rosterRowW;
-    // The Players stepper tops out at 7 opponents, so 8 seats is the ceiling.
-    // Stretch the pitch to fill the panel rather than leaving a 65px hole
-    // under a fixed 30px one.
-    const capacity = 8;
-    const pitch = Math.max(28, Math.min(40, Math.floor(this.rosterRowsH / capacity)));
-    const rowH = pitch - 4;
-    const teams = Math.max(1, this.teamsCount);
-    const slots = Math.min(capacity, this.opponents + 1);
-
-    for (let i = 0; i < capacity; i++) {
-      const taken = i < slots;
-      const team = teams > 1 ? (i % teams) + 1 : 0;
-      const color = !taken ? C_DIM : teams > 1 ? TEAM_COLORS[(team - 1) % TEAM_COLORS.length] : 0x00ccff;
-
-      const row = new Container();
-      row.y = i * pitch;
-
-      const bg = new Graphics();
-      bg.rect(0, 0, w, rowH).fill({ color, alpha: !taken ? 0.04 : i === 0 ? 0.16 : 0.07 });
-      bg.rect(0, 0, 3, rowH).fill({ color, alpha: taken ? 0.9 : 0.3 });
-      row.addChild(bg);
-
-      const name = new Text({
-        text: !taken ? "Empty" : i === 0 ? (SD.profile?.name ?? "Player") : `Bot ${i}`,
-        style: new TextStyle({
-          fill: !taken ? C_DIM : i === 0 ? C_VALUE : C_LABEL,
-          fontFamily: FONT_VALUE,
-          fontSize: 14,
-          fontStyle: taken ? "normal" : "italic",
-        }),
+    this.teamExtra.removeChildren();
+    const line = (text: string, fill: number, i: number): void => {
+      const t = new Text({
+        text,
+        style: new TextStyle({ fill, fontFamily: FONT_VALUE, fontSize: 12 }),
       });
-      name.anchor.set(0, 0.5);
-      name.alpha = !taken ? 0.45 : i === 0 ? A_VALUE : A_LABEL;
-      name.x = 14;
-      name.y = rowH / 2;
-      row.addChild(name);
-
-      const tag = new Text({
-        text: !taken ? "" : teams > 1 ? `TEAM ${team}` : i === 0 ? "YOU" : "BOT",
-        style: new TextStyle({ fill: color, fontFamily: FONT_VALUE, fontSize: 11, letterSpacing: 1 }),
-      });
-      tag.anchor.set(1, 0.5);
-      tag.alpha = 0.85;
-      tag.x = w - 12;
-      tag.y = rowH / 2;
-      row.addChild(tag);
-
-      this.rosterRows.addChild(row);
+      t.alpha = A_VALUE;
+      t.x = ROSTER_NAME_X;
+      t.y = ROSTER_NAME_Y + i * 13;
+      this.teamExtra.addChild(t);
+    };
+    const diff = DIFFS[this.diffIdx].label;
+    if (this.teamsCount <= 1) {
+      line(`Player + ${this.opponents} bots`, C_PLAYERNAME, 0);
+      return;
     }
+    const teams = Math.min(4, this.teamsCount);
+    const share = this.distributeBots();
+    if (teams <= 2) {
+      for (let i = 0; i < teams; i++) {
+        line(`Team ${i + 1}:  ${share[i]} bots   ·   Diff ${diff}`,
+          TEAM_COLORS[i % TEAM_COLORS.length], i);
+      }
+      return;
+    }
+    line(`${teams} TEAMS  ·  ${share.join(" / ")} bots   ·   Diff ${diff}`, TEAM_COLORS[0], 0);
+  }
+
+  /** Even bot split across the active teams (the Match draft seats them alike). */
+  private distributeBots(): number[] {
+    const teams = Math.max(1, Math.min(4, this.teamsCount));
+    const out: number[] = [];
+    let left = this.opponents;
+    for (let i = 0; i < teams; i++) {
+      const n = Math.round(left / (teams - i));
+      out.push(n);
+      left -= n;
+    }
+    return out;
   }
 
   private stepOpponents(dir: number): void {
@@ -799,170 +781,89 @@ export class PlayScreen extends Screen {
     Sound.play("R2_Click");
     this.diffIdx = (this.diffIdx + dir + DIFFS.length) % DIFFS.length;
     this.diffValue.text = DIFFS[this.diffIdx].label;
-  }
-
-  // --- stepper widgets ------------------------------------------------------
-
-  /** Label on the left of a stepper row, vertically centred in {@link ROW_H}. */
-  private rowLabel(text: string, x: number, y: number): Text {
-    const t = new Text({
-      text,
-      style: new TextStyle({ fill: C_LABEL, fontFamily: FONT_VALUE, fontSize: 14 }),
-    });
-    t.anchor.set(0, 0.5);
-    t.alpha = A_LABEL;
-    t.x = x;
-    t.y = y + ROW_H / 2;
-    this.view.addChild(t);
-    return t;
-  }
-
-  /** A full stepper row: label on the left, [‹ value ›] on the right.
-   *  `clusterW` narrows the arrow/value cluster for half-width twin rows. */
-  private stepper(
-    x: number,
-    y: number,
-    w: number,
-    label: string,
-    getValue: () => string,
-    onPrev: () => void,
-    onNext: () => void,
-    clusterW = CLUSTER_W,
-  ): Text {
-    this.rowLabel(label, x, y);
-    const value = this.stepperValue(x, y, w, onPrev, onNext, clusterW);
-    value.text = getValue();
-    return value;
-  }
-
-  /**
-   * Just the [‹ value ›] cluster, right-aligned within the row width.
-   *
-   * Everything in the row shares one vertical centre (`y + ROW_H / 2`) and the
-   * value sits at the exact midpoint of the two arrow centres, so a row reads
-   * as one horizontal band rather than three separately-offset pieces.
-   */
-  private stepperValue(
-    x: number,
-    y: number,
-    w: number,
-    onPrev: () => void,
-    onNext: () => void,
-    clusterW = CLUSTER_W,
-  ): Text {
-    const cy = y + ROW_H / 2;
-    const rightX = x + w;
-    const narrow = clusterW < CLUSTER_W;
-    // Inset each arrow by half a hit box so the cluster ends exactly on the
-    // row's right edge instead of overhanging it.
-    const prevCx = rightX - clusterW + ARROW_BOX / 2;
-    const nextCx = rightX - ARROW_BOX / 2;
-    this.view.addChild(this.arrow("‹", prevCx, cy, onPrev, narrow ? 16 : 18));
-    this.view.addChild(this.arrow("›", nextCx, cy, onNext, narrow ? 16 : 18));
-
-    const value = new Text({
-      text: "",
-      style: new TextStyle({ fill: C_VALUE, fontFamily: FONT_VALUE, fontSize: narrow ? 13 : 15 }),
-    });
-    value.anchor.set(0.5);
-    value.x = (prevCx + nextCx) / 2;
-    value.y = cy;
-    value.alpha = A_VALUE;
-    this.view.addChild(value);
-    return value;
-  }
-
-  /** A clickable chevron centred on (`cx`, `cy`), with a hit box big enough to
-   *  actually aim at — the bare glyph is only a few px wide. */
-  private arrow(glyph: string, cx: number, cy: number, onClick: () => void, size = 22): Container {
-    const c = new Container();
-    c.x = cx;
-    c.y = cy;
-    const t = new Text({
-      text: glyph,
-      style: new TextStyle({
-        fill: C_OPTIONS_GREEN,
-        fontFamily: FONT_HEADER,
-        fontSize: size,
-        fontWeight: "700",
-      }),
-    });
-    t.anchor.set(0.5);
-    c.addChild(t);
-    const box = Math.max(ARROW_BOX, size + 6);
-    c.hitArea = new Rectangle(-box / 2, -box / 2, box, box);
-    c.eventMode = "static";
-    c.cursor = "pointer";
-    c.on("pointerover", () => (t.alpha = 1));
-    c.on("pointerout", () => (t.alpha = 0.8));
-    c.on("pointertap", onClick);
-    t.alpha = 0.8;
-    return c;
+    this.paintRosterRows();
   }
 
   // --- bottom bar --------------------------------------------------------
 
   private buildBottomBar(): void {
-    const y = GAME_HEIGHT - 52;
+    // Anchored to the bottom of the layout box: Back bottom-left, the action
+    // pair bottom-right, exactly the source order. These are the screen's own
+    // children rather than the chrome's, so they carry `ox` themselves.
+    // `bottomY` is SWF y 516. The three plates are 28 tall and their `btn_*`
+    // placements are their *centres*, so each top is (placement y - 14):
+    // Back 543.85 -> 529.85, Upgrades 521.85 -> 507.85, Start 548.85 -> 534.85.
+    // Upgrades and Start were being placed at their centres, which dropped both
+    // 14px and pushed Start off the bottom of the bar.
+    //
+    // `btn_menu_*` is baked at its native 245x28 **SWF** px, and a Raze2Button
+    // lays its plate and label out in those units — but these buttons are
+    // children of the unscaled screen root, so the size has to arrive through
+    // `view.scale`, not by pre-multiplying width/height (which would stretch the
+    // plate without growing the label). Unscaled, the 245-wide plate rendered
+    // 172 SWF px wide and the right pair's labels stopped ~70px short.
+    const { s, stageW, ox, bottomY } = this.chrome;
+    // 245x28 and a ~14pt label are the source's own numbers (`txt_word` ink is
+    // 11px tall in the frame-37 render); `view.scale` carries them to screen.
+    const btnW = 245, btnH = 28, btnFont = 14;
+    const place = (b: Raze2Button, x: number, y: number): void => {
+      b.view.scale.set(s);
+      b.view.x = x;
+      b.view.y = y;
+      b.view.on("pointerover", () => Sound.play("R2_Click"));
+      this.view.addChild(b.view);
+    };
 
     const back = new Raze2Button("Back to Menu", {
-      width: 200,
-      height: 40,
+      width: btnW, height: btnH, fontSize: btnFont,
       onClick: () => {
         Sound.play("R2_ClickBack");
         this.engine.setScreen(MenuScreen, undefined, "slideRight");
       },
     });
-    back.view.x = 60;
-    back.view.y = y;
-    back.view.on("pointerover", () => Sound.play("R2_Click"));
-    this.view.addChild(back.view);
+    place(back, ox + 37 * s, bottomY + 13.85 * s);
 
-    // Secondary path: keep the online lobby reachable, tucked next to Back.
-    const online = new Raze2Button("Online Match", {
-      width: 180,
-      height: 40,
-      accent: C_ACCENT_SECONDARY,
-      onClick: () => {
-        Sound.play("R2_Click");
-        this.engine.setScreen(MultiplayerScreen, undefined, "slideLeft");
-      },
+    // Secondary path: keep the online lobby reachable. The SWF has no online
+    // screen, so this is a compact link tucked under the title strip.
+    const online = new Text({
+      text: "ONLINE MATCH",
+      style: new TextStyle({
+        fill: C_ACCENT_SECONDARY, fontFamily: FONT_HEADER, fontSize: 13 * s,
+        fontWeight: "700", letterSpacing: 2,
+      }),
     });
-    online.view.x = 300;
-    online.view.y = y;
-    online.view.on("pointerover", () => Sound.play("R2_Click"));
-    this.view.addChild(online.view);
+    online.alpha = A_LABEL;
+    online.x = ox + 14 * s;
+    online.y = 12 * s;
+    online.eventMode = "static";
+    online.cursor = "pointer";
+    online.on("pointerover", () => (online.alpha = 1));
+    online.on("pointerout", () => (online.alpha = A_LABEL));
+    online.on("pointertap", () => {
+      Sound.play("R2_Click");
+      this.engine.setScreen(MultiplayerScreen, undefined, "slideLeft");
+    });
+    this.view.addChild(online);
 
-    // Right-hand pair is pinned to the same 60px margin the left column uses,
-    // so the bar reads as symmetric rather than crowding the stage edge.
-    const startW = 240;
-    const upgradesW = 180;
-    const startX = GAME_WIDTH - 60 - startW;
+    const rightX = ox + stageW - 281.9 * s;
 
+    // The right pair are the mirrored plate (`MenuButtonReverse`): the bracket
+    // is on the right and the label is right-aligned to it, 15px in from the
+    // plate edge — measured ink x 677..748 against a plate ending at 763.
     const upgrades = new Raze2Button("Upgrades", {
-      width: upgradesW,
-      height: 40,
-      accent: C_ACCENT_UPGRADE,
+      width: btnW, height: btnH, fontSize: btnFont, reverse: true,
       onClick: () => {
         Sound.play("R2_Click");
         this.engine.setScreen(ArmoryScreen, undefined, "slideLeft");
       },
     });
-    upgrades.view.x = startX - 20 - upgradesW;
-    upgrades.view.y = y;
-    upgrades.view.on("pointerover", () => Sound.play("R2_Click"));
-    this.view.addChild(upgrades.view);
+    place(upgrades, rightX, bottomY - 8.15 * s);
 
     const start = new Raze2Button("Start Game", {
-      width: startW,
-      height: 40,
-      accent: C_OPTIONS_GREEN,
+      width: btnW, height: btnH, fontSize: btnFont, reverse: true,
       onClick: () => void this.start(),
     });
-    start.view.x = startX;
-    start.view.y = y;
-    start.view.on("pointerover", () => Sound.play("R2_Click"));
-    this.view.addChild(start.view);
+    place(start, rightX, bottomY + 18.85 * s);
   }
 
   private async start(): Promise<void> {

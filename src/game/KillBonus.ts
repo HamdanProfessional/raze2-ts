@@ -96,8 +96,10 @@ function make(id: string): AwardedBonus | null {
  * restriction that makes the match easier docks your earnings, and the warning
  * on the play screen quotes exactly this number.
  */
-export function creditMod(): number {
-  const m: any = SD.matchSettings ?? {};
+export function creditMod(settings?: unknown): number {
+  // `settings` lets the play screen quote the number for a match that has not
+  // started yet — `SD.matchSettings` is not written until Start Game.
+  const m: any = settings ?? SD.matchSettings ?? {};
   let mod = 1;
   const WEAPON_PENALTY: Record<string, number> = {
     Starters: 0.1, Sidearms: 0.1, "Close Range": 0.2, Automatics: 0.2,

@@ -1,5 +1,12 @@
 # Raze 2 Full-Parity Plan
 
+> **Status 2026-09-14:** Phase 0 documentation is complete (docs 01-16), and Phases 1-5
+> have largely landed — movement constants + terrain mods, the full weapon/projectile/
+> raycast rebuild, abilities/equipment/economy/AI/campaign/modes, maps+props+particles,
+> HUD chrome and audio. The remaining known items are small and listed in each doc's
+> Port status; the map variants (`city2` etc.) are source-limited (no Arena frames).
+> Every subsystem's Port status has been spot-corrected where it was stale.
+
 Goal: bring the TypeScript/PixiJS port to **100% Raze 2 parity** — every screen, system,
 weapon, and visual matching the original SWF. This file is the master plan. **Phase 0
 (documentation) runs first and blocks everything else**: we gather 100% of the game's data

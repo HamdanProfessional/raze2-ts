@@ -666,7 +666,12 @@ class BitAniFx implements FxObject {
   constructor(
     private name: string,
     private def: FxDef,
+    /** Frame to open on. `Game.createEffectAtFrame` — how a flamethrower jet
+     *  that hits a wall mid-flight finishes its animation at the impact point
+     *  instead of restarting (`Bullet_Proj_Frames.as:89`). */
+    startFrame = 0,
   ) {
+    this.frame = Math.max(0, Math.min(startFrame, def.frames - 1));
     this.rot = (Math.random() * def.rotAmt) | 0;
     this.spr.scale.set(1 / def.bakeScale);
     // A whitened effect is a flat mask standing in for a `mult=0` colour
@@ -699,25 +704,137 @@ class BitAniFx implements FxObject {
 }
 
 /**
+ * The port's invented effect names, mapped onto the `BH` clip the original
+ * would have played. These exist because the port had to name its impacts
+ * before any of the art was extractable — `"rocketExplode"` is not a Raze 2
+ * string, it is a description of one.
+ *
+ * Weapons out of `raze2/weapons.json` no longer come through here at all: they
+ * carry the authored `effShoot`/`effHit`/`params[0]` names and ask for those
+ * directly. This is for the call sites that still hardcode a name (the reflect
+ * grenade in `Projectile.ts`, the ability bursts) and for any weapon def built
+ * outside the catalog.
+ *
+ * Names absent from the table — `crit`, `sparkRain`, `getDdamage`, `getFade`,
+ * `getInvin` — have no BH counterpart because the original draws nothing there;
+ * they stay procedural rather than losing their read.
+ */
+const BH_ALIAS: Record<string, string> = {
+  // Hitscan strike sparks. The catalog's own pistols/shotguns fire `gas_small`,
+  // but a bare "a bullet hit something" wants the spark, not the smoke puff.
+  bullet: "spark_small",
+  pistol: "spark_small",
+  uzi: "spark_small",
+  sniper: "spark_big",
+  lazer: "spark_big",
+  lightning: "chain_hit",
+  plasma: "plasma_explode",
+  // Blasts. `gas_big` IS the Raze 2 explosion — every splash weapon in the
+  // catalog (rocket, grenade, mine, stick launcher) hits with a `gas_*` cloud.
+  bulletExplode: "spark_big",
+  grenadeExplode: "gas_big",
+  rocketExplode: "gas_big",
+  // `Bullet.as:205` passes `hitObject.skin.blood` straight to createEffect, so
+  // the skin names ARE effect names; plain "blood" is the unskinned default.
+  blood: "bloodHuman",
+  bloodBig: "bloodHuman",
+};
+
+/**
  * Build the effect display object for a given `wallEff`/misc effect type
  * string (as used by Guns.ts / Projectile.ts / Unit.ts / PickupItem.ts).
  * The caller is responsible for positioning `view` and adding it to a
  * parent container.
  *
- * `color` optionally overrides the impact tint — Guns.ts passes the firing
- * weapon's `sparkColor` so a railgun scars the wall cyan, plasma purple and a
- * rocket orange, instead of every hit looking the same.
+ * **The baked `BH` atlas wins.** `Effect.as` is the entire original effect
+ * system and every name it answers to is now extracted, so a hand-drawn
+ * stand-in only runs where the SWF genuinely has no clip. The procedural
+ * library stays for those names and as the headless-stub fallback.
  *
- * Resolution order is procedural first, then the baked `BH` atlas. The two sets
- * are disjoint today; keeping the hand-drawn ones ahead means re-baking more of
- * the atlas adds art without silently replacing effects that already look right.
+ * `color` is honoured only on the procedural path. The baked art carries its
+ * own authored colour — the SWF's `createEffect(x, y, name)` takes no tint, and
+ * a weapon's `sparkColor` painted over a finished explosion fights it. The
+ * exception is a `whitened` entry (the skin bloods), whose tint is part of the
+ * rig rather than something the caller chooses.
  */
 export function createEffect(type: string, color?: number, angleDeg?: number): FxObject {
+  // `FxArt.def` answers from the rig JSON, which is bundled and so always
+  // present; the atlas PNGs are not. Without this gate a failed (or not yet
+  // finished) load would hand back clips whose every cell resolves to null —
+  // combat would go silent-looking rather than falling back to the drawn
+  // library, which is also how the headless test stub runs.
+  const name = FxArt.loaded && FxArt.has(type) ? type : BH_ALIAS[type] ?? type;
+  const def = FxArt.loaded ? FxArt.def(name) : null;
+  if (def) return new BitAniFx(name, def);
   const drawn = procedural(type, color, angleDeg);
   if (drawn) return drawn;
-  const def = FxArt.def(type);
-  if (def) return new BitAniFx(type, def);
   return genericRing(0xffcc66);
+}
+
+/**
+ * `Game.createEffectAtFrame` — the same clip, opened partway through. Returns
+ * null (rather than a stand-in) when the name has no baked art, so the caller
+ * can fall back to whatever it drew before.
+ */
+export function createEffectAtFrame(type: string, frame: number): FxObject | null {
+  if (!FxArt.loaded) return null;
+  const name = FxArt.has(type) ? type : BH_ALIAS[type] ?? type;
+  const def = FxArt.def(name);
+  return def ? new BitAniFx(name, def, frame) : null;
+}
+
+/**
+ * One BH clip whose frame the *caller* advances, for art that belongs to a
+ * live object rather than to a fire-and-forget burst.
+ *
+ * `Bullet_Proj_Frames` (the flamethrower) is the case this exists for: the
+ * round has no body of its own, it IS a `flame` clip —
+ *
+ *     bitstats = BH.getBitAniStats(stats.params[0], "idle");
+ *     name = stats.params[0] + UT.irand(0, bitstats.rotAmt - 1);
+ *
+ * — rolled once at spawn and stepped one frame per tick as it flies, which is
+ * why a jet visibly billows out along its length instead of every puff looking
+ * alike.
+ */
+export class BhBody {
+  readonly view = new Container();
+  private spr = new Sprite();
+  private def: FxDef;
+  private rot: number;
+  /** Animation length — the flamethrower's fuse, in the original. */
+  readonly frames: number;
+
+  private constructor(private name: string, def: FxDef) {
+    this.def = def;
+    this.frames = def.frames;
+    this.rot = (Math.random() * def.rotAmt) | 0;
+    this.spr.scale.set(1 / def.bakeScale);
+    if (def.whitened) this.spr.tint = def.tint ?? 0xffffff;
+    this.view.alpha = def.alpha ?? 1;
+    this.view.addChild(this.spr);
+    this.setFrame(0);
+  }
+
+  /** The clip for `name`, or null when it has no baked art (or none loaded —
+   *  the caller then keeps whatever it drew by hand). */
+  static create(name: string): BhBody | null {
+    if (!FxArt.loaded) return null;
+    const def = FxArt.def(name);
+    return def ? new BhBody(name, def) : null;
+  }
+
+  setFrame(frame: number): void {
+    const f = Math.max(0, Math.min(frame, this.frames - 1));
+    const idx = this.rot * this.frames + f;
+    const tex = FxArt.cell(this.name, idx);
+    const cell = this.def.cells[idx];
+    this.spr.visible = !!tex;
+    if (!tex || !cell) return;
+    this.spr.texture = tex;
+    this.spr.x = cell.lx;
+    this.spr.y = cell.ly;
+  }
 }
 
 /** The hand-drawn library. Returns null for a name it has no art for, so

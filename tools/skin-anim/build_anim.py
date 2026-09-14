@@ -42,10 +42,11 @@ MANIFEST = os.path.join(SC, "..", "..", "src", "assets", "raze2", "skinAnim.json
 os.makedirs(OUT_SVG, exist_ok=True)
 
 # Frame ranges are the UnitMC (symbol 441) FrameLabelTag positions, 1-based and
-# inclusive — see docs/raze2/02-player-rig-skins.md §3. All 13 labels are listed;
-# `armorlock` (184-230) is deliberately NOT baked: at 47 frames it would widen
-# every sheet to ~4700px, past the 4096px max texture size a lot of GPUs report,
-# and no ability the port implements uses that pose.
+# inclusive — see docs/raze2/02-player-rig-skins.md §3. All 13 labels are baked.
+# `armorlock` (184-230) is the Static Field freeze pose: it used to be excluded
+# because a row-per-state grid would widen every sheet past the 4096px texture
+# cap, but the dense packing below absorbs its 47 cells (the combined cell grows
+# to 117x122, and the 230-cell sheet stays under the cap at the 2x supersample).
 STATES = [
     ("idle",        1,   20),
     ("run",         21,  41),
@@ -59,6 +60,7 @@ STATES = [
     ("duck",        161, 163),   # crouch entry, falls through to duckloop
     ("crouch",      164, 179),   # duckloop
     ("getup",       180, 183),   # crouch exit
+    ("armorlock",   184, 230),   # Static Field: frame230 forces abilityDone+idle
 ]
 # draw order back->front; (svg id to read matrix from, part clip id)
 PARTS = [
@@ -172,7 +174,10 @@ GRID_COLS = max(1, math.ceil(math.sqrt(TOTAL_CELLS * H / W)))
 GRID_ROWS = math.ceil(TOTAL_CELLS / GRID_COLS)
 SHEET_W = W * GRID_COLS
 SHEET_H = H * GRID_ROWS
-assert SHEET_W <= 4096 and SHEET_H <= 4096, f"sheet {SHEET_W}x{SHEET_H} exceeds the 4096 max texture size"
+# `render.py --scale 2` supersamples, so the texture is twice this — cap the
+# real upload size at the 4096 most GPUs report.
+assert SHEET_W * 2 <= 4096 and SHEET_H * 2 <= 4096, \
+    f"sheet {SHEET_W * 2}x{SHEET_H * 2} exceeds the 4096 max texture size"
 
 # Global cell index of each state's first frame, in STATES order.
 STATE_START = {}

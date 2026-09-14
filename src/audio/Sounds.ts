@@ -171,10 +171,20 @@ function resolveKey(key: string): string {
   return ALIASES[key] ?? key;
 }
 
-/** In-game music tracks chosen at random per match — the Raze 2 soundtrack. */
-export const MATCH_MUSIC = [
-  "R2_Necro", "R2_Rose", "R2_Ricochet", "R2_Infernal",
-  "R2_Theloop", "R2_Throwdown", "R2_Rocket", "R2_Warhead",
+/**
+ * `SH.songList` / `SH.songNames` (SH.as:85-86), in the original order — the
+ * "Play Next Song" button walks this array and wraps, and the HUD caption
+ * prints `songNames[curSongNum]`.
+ */
+export const R2_SONGS: { key: string; name: string }[] = [
+  { key: "R2_Rose", name: "Rose at Nightfall" },
+  { key: "R2_Rocket", name: "Rocket Race" },
+  { key: "R2_Warhead", name: "Warhead" },
+  { key: "R2_Throwdown", name: "Throwdown" },
+  { key: "R2_Necro", name: "Necromancy" },
+  { key: "R2_Ricochet", name: "Ricochet Love" },
+  { key: "R2_Theloop", name: "The Loop that Wasn't" },
+  { key: "R2_Infernal", name: "Infernal Signs" },
 ];
 
 /**
@@ -199,20 +209,20 @@ interface AmbienceProfile {
   cutoff: number;
 }
 
-const AMBIENCE: Record<string, AmbienceProfile> = {
-  // Open city rooftops: wind is the dominant voice.
-  city: { hum: 55, air: 0.05, buzz: 0, cutoff: 700 },
-  // Sealed station: ventilation drone, almost no wind.
-  space: { hum: 44, air: 0.02, buzz: 0, cutoff: 260 },
-  // Failing chemical plant: heavy low rumble plus a mains buzz.
-  toxic: { hum: 48, air: 0.035, buzz: 0.012, cutoff: 420 },
-  // Underground pit: deep, close, muffled.
-  pit: { hum: 38, air: 0.03, buzz: 0, cutoff: 200 },
-};
+// Raze 2 levels all share the default bed (the Raze 1 per-level profiles were
+// removed with their maps); Raze 2 maps may add their own here later.
+const AMBIENCE: Record<string, AmbienceProfile> = {};
 const AMBIENCE_DEFAULT: AmbienceProfile = { hum: 50, air: 0.03, buzz: 0, cutoff: 500 };
 
 /** Seconds the ambience bed takes to fade in / out, so it never pops. */
 const AMBIENCE_RAMP = 1.5;
+
+/**
+ * Music crossfade length, in seconds. `SH.EnterFrame` steps both the outgoing
+ * and incoming track by `0.025` per 30fps frame, i.e. 40 frames from full to
+ * silent — and the same time back up for the replacement.
+ */
+const MUSIC_FADE = 40 / 30;
 
 // --- spatialisation tuning -------------------------------------------------
 
@@ -258,6 +268,11 @@ class SoundManager {
   private buffers = new Map<string, AudioBuffer>();
 
   private musicSrc: AudioBufferSourceNode | null = null;
+  /** Per-track gain, so one voice can fade while a replacement rises. */
+  private musicVoice: GainNode | null = null;
+  /** The outgoing voice of an in-flight crossfade, silenced + stopped. */
+  private fadeSrc: AudioBufferSourceNode | null = null;
+  private fadeGain: GainNode | null = null;
   private currentMusic = "";
   private loaded = false;
 
@@ -413,26 +428,117 @@ class SoundManager {
     if (!ctx) return;
     const buf = this.buffers.get(resolveKey(key));
     if (!buf || !this.musicGain) return;
-    this.stopMusic();
+
+    const now = ctx.currentTime;
+    // SH.playMusic: the outgoing track slides onto its own gain and fades out
+    // while the new one ramps up, both at 0.025/frame (40 frames ≈ 1.33s).
+    // A still-fading earlier track is cut, so a fast string of picks cannot
+    // stack voices.
+    this.releaseFade(now);
+    if (this.musicSrc && this.musicVoice) {
+      const oldSrc = this.musicSrc;
+      const oldGain = this.musicVoice;
+      this.rampDown(oldGain.gain, now);
+      try {
+        oldSrc.stop(now + MUSIC_FADE);
+      } catch {
+        /* already stopped */
+      }
+      this.fadeSrc = oldSrc;
+      this.fadeGain = oldGain;
+    }
+
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.loop = true;
-    src.connect(this.musicGain);
+    const voice = ctx.createGain();
+    if (this.fadeGain) {
+      // Something is fading out: start silent and rise under it.
+      voice.gain.value = 0.0001;
+      voice.gain.linearRampToValueAtTime(1, now + MUSIC_FADE);
+    } else {
+      voice.gain.value = 1; // first track starts at full volume (param2 == true)
+    }
+    src.connect(voice).connect(this.musicGain);
     src.start();
     this.musicSrc = src;
+    this.musicVoice = voice;
     this.currentMusic = key;
   }
 
   stopMusic(): void {
-    if (this.musicSrc) {
+    const ctx = this.ctx;
+    if (this.musicSrc && this.musicVoice && ctx) {
+      const now = ctx.currentTime;
+      const src = this.musicSrc;
+      const voice = this.musicVoice;
+      this.musicSrc = null;
+      this.musicVoice = null;
+      this.rampDown(voice.gain, now);
+      try {
+        src.stop(now + MUSIC_FADE);
+      } catch {
+        /* already stopped */
+      }
+      this.fadeSrc = src;
+      this.fadeGain = voice;
+    } else if (this.musicSrc) {
       try {
         this.musicSrc.stop();
       } catch {
         /* already stopped */
       }
       this.musicSrc = null;
+      this.musicVoice = null;
     }
     this.currentMusic = "";
+  }
+
+  /** Silence + release an earlier crossfade's outgoing voice, if any. */
+  private releaseFade(now: number): void {
+    if (!this.fadeSrc) return;
+    try {
+      this.fadeSrc.stop(now);
+    } catch {
+      /* already stopped */
+    }
+    this.fadeSrc = null;
+    this.fadeGain = null;
+  }
+
+  /** Ramp a gain param from wherever it is now to silence over the fade. */
+  private rampDown(param: AudioParam, now: number): void {
+    param.cancelScheduledValues(now);
+    param.setValueAtTime(param.value, now);
+    param.linearRampToValueAtTime(0.0001, now + MUSIC_FADE);
+  }
+
+  // --- song list / the HUD's "Play Next Song" (Hud.playSong) ---------------
+
+  private songIndex = -1;
+
+  /** `Hud.playSong(false)`: pick a random track, then caption it. */
+  playRandomSong(): void {
+    this.playSongAt(Math.floor(Math.random() * R2_SONGS.length));
+  }
+
+  /**
+   * `Hud.playSong(true)`: advance one track and wrap — what clicking "Play Next
+   * Song" does in the original (`Hud.as:206-221`).
+   */
+  playNextSong(): void {
+    this.playSongAt(this.songIndex < 0 ? 0 : (this.songIndex + 1) % R2_SONGS.length);
+  }
+
+  /** Caption for the current in-match song ("" when none has been cued). */
+  get songName(): string {
+    return R2_SONGS[this.songIndex]?.name ?? "";
+  }
+
+  /** Shared body of `playSong`: set the index, then start the track. */
+  private playSongAt(i: number): void {
+    this.songIndex = i;
+    this.setMusic(R2_SONGS[i].key);
   }
 
   // --- synthesized one-shots ---------------------------------------------

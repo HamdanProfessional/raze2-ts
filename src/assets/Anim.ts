@@ -8,8 +8,8 @@ import { ASSET_BASE, ASSET_V } from "../core/Config";
  * (Idle/WalkForward/WalkBack/Jump/Fall/Crouch). The decompiler baked each pose
  * to a sequence of full-body PNGs (default costume), which we play back directly
  * for the live character — authentic motion posed by the original animators.
- * Per-costume colouring survives on the death ragdoll, which uses the per-frame
- * limb art (see Parts.ts).
+ * Per-costume colouring survives on the death ragdoll, which rebuilds the same
+ * Phys* part clips loose (see RagdollArt.ts).
  */
 
 export type AnimState =

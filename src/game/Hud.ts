@@ -2,10 +2,12 @@ import { CanvasTextMetrics, Container, Graphics, Sprite, Text, TextStyle, Textur
 import { GAME_WIDTH, GAME_HEIGHT, FPS } from "../core/Config";
 import { ArmArt } from "../assets/ArmArt";
 import { SkinArt } from "../assets/SkinArt";
+import { UiArt, glyphIdFor } from "../assets/UiArt";
 import { GUN_ORDER, WEAPONS } from "./weapons";
 import { SPREE_TIERS } from "./Score";
 import { SD } from "../state/SD";
 import { Quality } from "../state/Quality";
+import { Sound } from "../audio/Sounds";
 import type { GameScreen } from "./GameScreen";
 import { FONT_VALUE } from "../ui/raze2";
 import {
@@ -96,10 +98,6 @@ const CRED_BAR1_X = 188;
 // --- bottom row: vitals slab + weapon rack ---------------------------------
 const ROW_H = 60;
 
-const VIT_W = 406;
-/** The angled grey wedge that closes the slab off toward the weapon rack. */
-const VIT_TAIL = 74;
-
 const GUN_X = 8;
 const GUN_W = 64;
 const GUN_H = 40;
@@ -118,10 +116,28 @@ const SH_MAX_H = 33;
 const EN_X = 194;
 
 const EKG_X = 206;
-const EKG_W = 192;
-const EKG_H = 46;
+/** The baked `heartbeat` plate's own size — the recess is cut to match it, so
+ *  the meter fills the monitor instead of leaving dead glass to its right. */
+const EKG_W = 130.33;
+const EKG_H = 23.67;
+/** The plate's top edge sits this far below `EKG_Y` (the recess top). */
+const EKG_TOP_OFFSET = 10;
 /** Left column of the monitor is the "N%" read-out; the trace starts after it. */
 const EKG_TEXT_W = 54;
+/** Baked EKG morph samples per health band (`beat_<band>_00..29`). */
+const HEART_TRACE_FRAMES = 30;
+
+/**
+ * The slab ends where its last widget does. In the original the ammo panel's
+ * right edge IS the monitor's (`heartbeat` is placed at stage x 134, 130.33
+ * wide, and the angled wedge starts at 264 — no gap), so deriving this instead
+ * of hardcoding it keeps that true if the row is ever re-proportioned again. It
+ * was 406 against contents that stop at 339, which left 70px of dead glass
+ * hanging off the monitor.
+ */
+const VIT_W = EKG_X + EKG_W + 6;
+/** The angled grey wedge that closes the slab off toward the weapon rack. */
+const VIT_TAIL = 74;
 
 // --- weapon rack (doc 14 §1.3) --------------------------------------------
 // Seven `gun0..gun6` holders, one per armory slot and per number-row key.
@@ -470,6 +486,12 @@ export class Hud {
   private campName!: Text;
   private campLine!: Text;
 
+  // Quick-match song caption + "Play Next Song" (`txt_songname`/`txt_songplay`).
+  private songName!: Text;
+  private songNext!: Text;
+  /** Last caption written, so the per-frame pass can skip a no-op set. */
+  private songShown = "";
+
   // Walkthrough instruction card (top-centre, under the clock).
   private tutCard = new Container();
   private tutCardG = new Graphics();
@@ -521,6 +543,16 @@ export class Hud {
   /** Free-running frame counter, for the Juggernaut pulse and ammo flash. */
   private tick = 0;
 
+  /** Baked `heartbeat` monitor plate + trace, tinted to the health ramp. */
+  private heartSprite = new Sprite(Texture.EMPTY);
+  private heartState: string | null = null;
+  /** The monitor's animating EKG trace (baked shape-morph samples). */
+  private heartTrace = new Sprite(Texture.EMPTY);
+  private heartTraceFrames: Texture[] = [];
+  private heartTraceBand: string | null = null;
+  /** SWF px per texture px for the current band's trace frames (see below). */
+  private heartTraceScale = 1;
+
   constructor(private game: GameScreen) {
     const type = String(SD.matchSettings?.type ?? "dm");
     this.teamMode = type === "tdm" || type === "telim" || type === "ctf" || type === "dom";
@@ -534,6 +566,17 @@ export class Hud {
     this.kfY = this.jugY + 4;
 
     this.view.addChild(this.chromeG);
+    this.heartSprite.anchor.set(0, 0);
+    this.heartSprite.x = EKG_X;
+    this.heartSprite.y = EKG_Y + EKG_TOP_OFFSET;
+    this.heartSprite.visible = false;
+    this.view.addChild(this.heartSprite);
+    // The pulse rides on the plate; same crop, so it lines up exactly.
+    this.heartTrace.anchor.set(0, 0);
+    this.heartTrace.x = EKG_X;
+    this.heartTrace.y = EKG_Y + EKG_TOP_OFFSET;
+    this.heartTrace.visible = false;
+    this.view.addChild(this.heartTrace);
     this.view.addChild(this.dynG);
 
     // --- bottom-left vitals slab ---
@@ -556,7 +599,7 @@ export class Hud {
     this.hpText = mkValueText(19);
     this.hpText.anchor.set(0, 0.5);
     this.hpText.x = EKG_X + 6;
-    this.hpText.y = EKG_Y + EKG_H / 2;
+    this.hpText.y = EKG_Y + EKG_TOP_OFFSET + EKG_H / 2;
     this.view.addChild(this.hpText);
 
     // Captions over the slab: ability readiness on the left, ammo state beside
@@ -672,6 +715,9 @@ export class Hud {
     // --- top-left campaign story box (hidden until a line is spoken) ---
     this.buildCampBox();
 
+    // --- top-left quick-match song caption + "Play Next Song" ---
+    this.buildSongControls();
+
     // --- top-centre walkthrough instruction card (hidden outside mission 1) ---
     this.buildTutCard();
 
@@ -738,7 +784,7 @@ export class Hud {
 
     this.gunGlyph.y = GUN_Y + GUN_H / 2;
     this.clipMult.y = ROW_Y + 4;
-    this.hpText.y = EKG_Y + EKG_H / 2;
+    this.hpText.y = EKG_Y + EKG_TOP_OFFSET + EKG_H / 2;
     this.enText.y = ROW_LABEL_Y;
     this.ammoState.y = ROW_LABEL_Y;
     this.streakText.position.set(RACK_X, ROW_LABEL_Y);
@@ -820,6 +866,54 @@ export class Hud {
 
     this.campBox.addChild(this.campFxG);
     this.view.addChild(this.campBox);
+  }
+
+  /**
+   * The quick-match song caption and "Play Next Song" button (Hud.as:191-221;
+   * the click is Player.as:174). The original anchors `txt_songname` at the
+   * top-left of its 800-wide HUD and `txt_songplay` 207px along, on the same
+   * line; campaign matches blank both fields.
+   */
+  private buildSongControls(): void {
+    this.songName = mkText(10, C_DIM, true);
+    this.songName.x = M;
+    this.songName.y = M;
+    this.songName.visible = false;
+    this.view.addChild(this.songName);
+
+    this.songNext = mkText(10, C_ACCENT, true);
+    this.songNext.text = "Play Next Song";
+    this.songNext.x = 210;
+    this.songNext.y = M;
+    this.songNext.visible = false;
+    this.songNext.eventMode = "static";
+    this.songNext.cursor = "pointer";
+    this.songNext.on("pointertap", () => {
+      Sound.playNextSong();
+      this.updateSongLabel();
+    });
+    this.songNext.on("pointerover", () => {
+      this.songNext.style.fill = 0xffffff;
+    });
+    this.songNext.on("pointerout", () => {
+      this.songNext.style.fill = C_ACCENT;
+    });
+    this.view.addChild(this.songNext);
+  }
+
+  /**
+   * Caption the live track, or hide the row. Campaign missions force a song and
+   * deliberately show nothing (`Hud.as:195-198`), and before the first track is
+   * cued there is no name to print.
+   */
+  private updateSongLabel(): void {
+    const name = Sound.songName;
+    const show = !SD.matchSettings?.campaign && !!name;
+    this.songName.visible = show;
+    this.songNext.visible = show;
+    if (!show || name === this.songShown) return;
+    this.songShown = name;
+    this.songName.text = `Song: ${name}`;
   }
 
   /**
@@ -1279,9 +1373,10 @@ export class Hud {
       .lineTo(VIT_W + VIT_TAIL, ROW_BOT)
       .stroke({ color: C_BEZEL_HI, width: 1.5, alpha: 0.5 });
 
-    // Recesses for the weapon glyph and the heartbeat monitor.
+    // Recesses for the weapon glyph and the heartbeat monitor. The monitor
+    // recess is cut to the baked `heartbeat` plate so the meter fills it.
     razeGlass(g, GUN_X, GUN_Y, GUN_W, GUN_H);
-    razeGlass(g, EKG_X - 3, EKG_Y - 2, EKG_W + 6, EKG_H + 4);
+    razeGlass(g, EKG_X - 3, EKG_Y + EKG_TOP_OFFSET - 3, EKG_W + 6, EKG_H + 6);
 
     // The seven weapon-holder tiles; their contents are drawn per frame.
     for (let i = 0; i < RACK_SLOTS; i++) {
@@ -1313,6 +1408,7 @@ export class Hud {
     this.advanceKillFeed();
     this.advanceAnnounce();
     this.advanceCampMsg();
+    this.updateSongLabel();
     this.damage.enterFrame();
     this.drawFullScoreboard();
 
@@ -1338,7 +1434,8 @@ export class Hud {
     // --- weapon glyph ---
     const id: string | null = gun?.id ?? null;
     if (id && this.glyphId !== id) {
-      const tex = ArmArt.getIcon(id);
+      const rig = glyphIdFor(id);
+      const tex = (rig ? UiArt.r2(rig) : null) ?? ArmArt.getIcon(id);
       if (tex) {
         this.gunGlyph.texture = tex;
         this.glyphId = id;
@@ -1374,19 +1471,68 @@ export class Hud {
     }
 
     // --- heartbeat monitor ---
-    // Scroll speed rises with the heartbeat rate, i.e. with health.
-    this.ekgPhase += 0.015 + 0.035 * hpPer;
+    // The authentic `heartbeat` clip: one plate per health band (empty / low /
+    // half / full), colour-ramped like `Hud.setHealth()` (doc 14 §1.1), with
+    // the band's 60-frame EKG shape-morph playing over it — `gotoAndPlay(band)`
+    // in the source. 30 baked samples at half speed keep the 2s loop.
     const tint = healthTint(hpPer);
-    for (let i = 1; i < 4; i++) {
-      const gy = EKG_Y + (EKG_H * i) / 4;
-      g.moveTo(EKG_X, gy).lineTo(EKG_X + EKG_W, gy)
-        .stroke({ color: tint, width: 1, alpha: 0.13 });
+    const band =
+      hpPer <= 0 ? "empty"
+        : hpPer < 0.35 ? "low"
+          : hpPer < 0.71 ? "half"
+            : "full";
+    const heartName = `hud_heart_${band}`;
+    const heartTex = UiArt.r2(heartName);
+    const heartMeta = UiArt.meta(heartName);
+    this.heartSprite.visible = !!heartTex;
+    if (heartTex && heartMeta) {
+      if (this.heartState !== heartName) {
+        this.heartState = heartName;
+        this.heartSprite.texture = heartTex;
+        this.heartSprite.scale.set(1 / heartMeta.scale);
+      }
+      // `setHealth` tints the whole clip with `ColorTransform.color`, which
+      // rewrites the RGB channels but leaves alpha alone — so the plate keeps
+      // the source's 0.3-alpha glass sheen under an opaque tick rule.
+      this.heartSprite.tint = tint;
+
+      if (this.heartTraceBand !== band) {
+        this.heartTraceBand = band;
+        this.heartTraceFrames = [];
+        for (let i = 0; i < HEART_TRACE_FRAMES; i++) {
+          const tex = UiArt.r2(`beat_${band}_${String(i).padStart(2, "0")}`);
+          if (tex) this.heartTraceFrames.push(tex);
+        }
+        // The trace is baked denser than the plate (2x vs 1.5x) — a 1px EKG
+        // stroke shows its stair-steps where a soft gradient does not — so it
+        // needs its OWN supersample factor here. Borrowing the plate's stretched
+        // it to 4/3 size and ran the flat tail out past the monitor's right edge.
+        this.heartTraceScale = 1 / (UiArt.meta(`beat_${band}_00`)?.scale || 1);
+      }
+      const trace = this.heartTraceFrames.length === HEART_TRACE_FRAMES
+        ? this.heartTraceFrames[(this.tick >> 1) % HEART_TRACE_FRAMES]
+        : null;
+      this.heartTrace.visible = !!trace;
+      if (trace) {
+        this.heartTrace.texture = trace;
+        this.heartTrace.scale.set(this.heartTraceScale);
+        this.heartTrace.tint = tint;
+      }
+    } else {
+      // Fallback (headless/texture-less): the port's drawn EKG.
+      this.heartTrace.visible = false;
+      this.ekgPhase += 0.015 + 0.035 * hpPer;
+      const top = EKG_Y + EKG_TOP_OFFSET;
+      for (let i = 1; i < 4; i++) {
+        const gy = top + (EKG_H * i) / 4;
+        g.moveTo(EKG_X, gy).lineTo(EKG_X + EKG_W, gy)
+          .stroke({ color: tint, width: 1, alpha: 0.13 });
+      }
+      drawHeartbeat(
+        g, EKG_X + EKG_TEXT_W, top, EKG_W - EKG_TEXT_W - 4, EKG_H,
+        hpPer, this.ekgPhase, tint,
+      );
     }
-    // The trace starts clear of the "N%" column so the two never overlap.
-    drawHeartbeat(
-      g, EKG_X + EKG_TEXT_W, EKG_Y, EKG_W - EKG_TEXT_W - 4, EKG_H,
-      hpPer, this.ekgPhase, tint,
-    );
     this.hpText.text = `${Math.ceil(hpPer * 100)}%`;
     this.hpText.style.fill = tint;
 
@@ -1641,7 +1787,8 @@ export class Hud {
 
       const icon = this.slotIcons[k];
       if (this.slotIconId[k] !== id) {
-        const tex = ArmArt.getIcon(id);
+        const rig = glyphIdFor(id);
+        const tex = (rig ? UiArt.r2(rig) : null) ?? ArmArt.getIcon(id);
         if (tex) {
           icon.texture = tex;
           this.slotIconId[k] = id;

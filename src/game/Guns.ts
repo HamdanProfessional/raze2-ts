@@ -52,25 +52,21 @@ function bloodEffect(shielded: boolean, fallback: string): string {
 }
 
 /**
- * Blood tint per race (`Stats_Skins.addSkin`'s 4th arg, which `Bullet.as:205`
- * hands straight to `createEffect`). The original has five separate recoloured
- * clips; the port draws one white spray and tints it, so what the skin selects
- * here is a colour rather than an effect name. Values are the cxform adds baked
- * on BH character 1740.
+ * Blood clip per race — `Stats_Skins.addSkin`'s 4th arg, which `Bullet.as:205`
+ * hands straight to `createEffect`, so a skin's "blood" field IS an effect name
+ * (`bloodHuman` / `bloodAlien` / `bloodRobot` / `bloodZombie`). The port used to
+ * turn it back into a colour and tint one white spray with it, because it had no
+ * art; all five clips are baked now, so the name goes through untouched. The
+ * recolours are still one atlas under five `mult=0` transforms — that collapse
+ * lives in `fxRig.json`'s aliases rather than here.
  */
-const BLOOD_TINT: Record<string, number> = {
-  bloodHuman: 0xcc0000,
-  bloodAlien: 0x9900ff,
-  bloodRobot: 0x000000,
-  bloodZombie: 0x669900,
-};
 const SKIN_BLOOD: Record<string, string> = Object.fromEntries(
   RAZE2_SKINS.map((s) => [s.id, s.blood]),
 );
 
-/** The victim's blood colour, or undefined (human red) for an unskinned unit. */
-function bloodTint(victim: { skinId?: string }): number | undefined {
-  return BLOOD_TINT[SKIN_BLOOD[victim.skinId ?? ""] ?? ""];
+/** The victim's blood clip; human red for an unskinned unit. */
+export function bloodName(victim: { skinId?: string }): string {
+  return SKIN_BLOOD[victim.skinId ?? ""] ?? "bloodHuman";
 }
 
 /**
@@ -330,6 +326,8 @@ export class Guns {
       if (!this.gunOrder.includes(id)) this.gunOrder.push(id);
     }
     this.addClip(id, Math.ceil(this.clipMax(g) / 2));
+    // `NodePickup.as:268` — the crate's own burst, above the head that took it.
+    this.unit.game.addEffect(this.unit.x, this.unit.y - 45, "getweapon");
   }
 
   /** The gun on rack slot `n` — the same packing the HUD draws. */
@@ -499,14 +497,23 @@ export class Guns {
     const tip = this.muzzleTip(angleDeg);
     const game = this.unit.game;
 
-    // Muzzle flash: kept at every quality level, scaled by the weapon's punch.
-    game.addMuzzleFlash?.(
-      tip.x,
-      tip.y,
-      angleDeg,
-      gun.muzzleColor ?? 0xffd86b,
-      (gun.muzzleSize ?? 9) * (0.85 + kick * 0.3),
-    );
+    // `Bullet.as:141` — the muzzle clip, at the point the round leaves from.
+    // Where a gun names one (`effShoot`) that clip IS the flash, so the
+    // procedural one would only double it; the guns that name none (the
+    // flamethrower, the grenade launcher, the mine layer) flash nothing in the
+    // original, but keeping the drawn flash there is the difference between a
+    // launcher reading as fired and reading as jammed, so it stands in.
+    if (gun.muzzleEff) {
+      game.addEffect(tip.x, tip.y, gun.muzzleEff);
+    } else {
+      game.addMuzzleFlash?.(
+        tip.x,
+        tip.y,
+        angleDeg,
+        gun.muzzleColor ?? 0xffd86b,
+        (gun.muzzleSize ?? 9) * (0.85 + kick * 0.3),
+      );
+    }
 
     // Eject a casing sideways-and-back from the breech, tumbling.
     if (gun.shell) {
@@ -571,7 +578,7 @@ export class Guns {
     // `shielded` is sampled BEFORE the damage lands: `Bullet.as` draws the blood
     // at line 205 and calls `status.damage` at 242, so the shot that empties a
     // shield still sparks off it — and the shieldbreak fires alongside.
-    let unitHit: { x: number; y: number; shielded: boolean; blood?: number } | null = null;
+    let unitHit: { x: number; y: number; shielded: boolean; blood: string } | null = null;
     /** First unit hit — the seed for an arc-chain (railgun2). */
     let primaryTarget: any = null;
     // Kills from this single shot — 3 in one railgun blast earns "Knockout".
@@ -605,7 +612,7 @@ export class Guns {
           const shielded = (u.status.shCur ?? 0) > 0;
           if (this.doHitUnit(u, px, py, cos, sin, hs, dmgMod)) killsThisShot++;
           hitAny = true;
-          unitHit = { x: px, y: py, shielded, blood: bloodTint(u) };
+          unitHit = { x: px, y: py, shielded, blood: bloodName(u) };
           if (!primaryTarget) primaryTarget = u;
           if (!this.curGun.piercing) {
             blocked = true;
@@ -668,20 +675,16 @@ export class Guns {
       }
     }
     if (unitHit) {
-      // Blood keeps its own (victim) tint — don't stain it with the weapon's
-      // spark colour; energy impacts (plasma/lightning) do take the tint.
-      let eff = this.curGun.unitEff ?? "blood";
-      const isBlood = eff === "blood" || eff === "bloodBig";
-      if (isBlood) eff = bloodEffect(unitHit.shielded, eff);
-      // Plain blood carries the victim's race tint; the shield/rainbow variants
-      // are their own baked art and must not be recoloured.
-      const plainBlood = isBlood && eff !== "bloodShield" && eff !== "bloodRainbow";
-      this.unit.game.addEffect(
-        unitHit.x,
-        unitHit.y,
-        eff,
-        plainBlood ? unitHit.blood : isBlood ? undefined : this.curGun.sparkColor,
-      );
+      // `Bullet.as:201-235` draws BOTH: the victim's blood at 205 and the
+      // weapon's own `effHit` at 235, thirty lines apart with the damage call
+      // between them. The port used to pick one or the other, so a hit either
+      // bled or flashed but never did both — and a gun whose `effHit` is its
+      // signature (the chaingun's `chain_hit`, the alien sniper's
+      // `plasma_explode`) lost that signature the moment it hit a person.
+      this.unit.game.addEffect(unitHit.x, unitHit.y, bloodEffect(unitHit.shielded, unitHit.blood));
+      if (this.curGun.unitEff) {
+        this.unit.game.addEffect(unitHit.x, unitHit.y, this.curGun.unitEff);
+      }
     }
     this.unit.game.addTracer(m.x, m.y, hitX, hitY, this.tracerOpts(beam, !!unitHit));
   }

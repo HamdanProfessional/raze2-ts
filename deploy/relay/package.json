@@ -1,0 +1,14 @@
+{
+  "name": "raze-relay",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Raze multiplayer lobby/relay server — bundled deployment payload.",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.21.3"
+  }
+}

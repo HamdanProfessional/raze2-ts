@@ -1,6 +1,7 @@
 import { Container, Graphics, Sprite, Text, TextStyle, BlurFilter } from "pixi.js";
 import { Backgrounds } from "../assets/Backgrounds";
 import { SkinAnim } from "../assets/SkinAnim";
+import { UiArt } from "../assets/UiArt";
 import { GAME_WIDTH, GAME_HEIGHT, DESIGN_WIDTH, PTM, CAMERA_ZOOM, FPS } from "../core/Config";
 import { Screen } from "../core/Screen";
 import { Input } from "../core/Input";
@@ -26,7 +27,7 @@ import { NetPlayer } from "./NetPlayer";
 import { NetGame, type KillEvent, type RosterEntry, type UnitNetState, type NetInput } from "../net/NetGame";
 import { Net } from "../net/Net";
 import { K } from "../core/K";
-import { Sound, MATCH_MUSIC } from "../audio/Sounds";
+import { Sound } from "../audio/Sounds";
 import { Unit } from "./Unit";
 import {
   Raze2Button,
@@ -44,7 +45,6 @@ import {
   A_BODY,
 } from "../ui/raze2";
 import { ScoreBoard, type ScoreRow } from "../screens/ScoresScreen";
-import { C_VICTORY, C_DANGER } from "./HudComponents";
 import { QUALITY_LEVELS } from "../state/Quality";
 
 const DEG = Math.PI / 180;
@@ -56,7 +56,7 @@ const TEAM_NAMES = ["Blue", "Orange", "Yellow", "Green"];
 const ROUND_END_FADE = Math.round(FPS * 0.6);
 /** Total time the card is up before it hands back to the level screen. */
 const ROUND_END_HOLD = FPS * 3;
-const ROUND_END_BOARD_W = 700;
+const ROUND_END_BOARD_W = 474; // = the SWF `ScoreBoardBar` width (473.84)
 
 /**
  * Effect types that belong *behind* unit bodies: gore should pool around a
@@ -255,6 +255,8 @@ export class GameScreen extends Screen {
    *  {@link endGame}, so it is null for the whole of a live match. */
   private roundEnd: Container | null = null;
   private roundEndBg = new Graphics();
+  /** Baked `PauseScreen` "gamedone" plate (victory/defeat backdrop). */
+  private roundEndPlate: Sprite | null = null;
   private roundEndHeader: Text | null = null;
   private roundEndBoard: ScoreBoard | null = null;
   /** Ticks since the match ended. Drives the fade-in and the auto-exit. */
@@ -301,6 +303,8 @@ export class GameScreen extends Screen {
   private fxFront = new Container();
   private frameEff: any[] = [];
   private fx: FxObject[] = [];
+  /** Projectile exhaust, budgeted apart from `fx` — see {@link addTrailEffect}. */
+  private trailFx: FxObject[] = [];
   private tracers: Tracer[] = [];
   /** Red "you are being hit" vignette, drawn over the arena but under the HUD. */
   private damageFlash = new Graphics();
@@ -323,6 +327,13 @@ export class GameScreen extends Screen {
    * stranding it against the left edge under a centred title.
    */
   private pauseBody = new Container();
+  /** SWF-space (800x600) root of the pause screen: the baked plates and all
+   *  interactive chrome live here; `resize()` scales/centres the whole thing. */
+  private pausePlateRoot = new Container();
+  private pausePlates: Partial<Record<"main" | "scores" | "options" | "quit", Sprite>> = {};
+  /** Mission name/blurb shown on the pause + scores subs (hidden on Options/Quit
+   *  where the baked plate carries its own headers). */
+  private pauseMission: (Text | null)[] = [];
   /** Backdrop parallax layer and its origin at camera (0, 0). */
   private bgSprite: Sprite | null = null;
   private bgHome = { x: 0, y: 0 };
@@ -549,7 +560,7 @@ export class GameScreen extends Screen {
     m.type ??= "dm";
     m.diff ??= 1;
     m.opponents ??= 3;
-    m.level ??= "city";
+    m.level ??= "r2_jungle";
     m.score ??= 20;
     m.dmgMod ??= 1;
     m.ff ??= false;
@@ -659,11 +670,11 @@ export class GameScreen extends Screen {
         }
       }
     } else if (SD.music) {
-      Sound.setMusic(MATCH_MUSIC[Math.floor(Math.random() * MATCH_MUSIC.length)]);
+      Sound.playRandomSong();
     }
     // Ambient bed for this arena — wind on the rooftops, ventilation in space,
     // a failing mains buzz in the toxic plant. Torn down in destructor().
-    Sound.setAmbience(String(m.level ?? "city"));
+    Sound.setAmbience(String(m.level ?? "r2_jungle"));
 
     if (m.level === "sandbox") {
       this.hud.addMessage?.("SANDBOX — infinite ammo · press B to toggle bot AI", 0x66ccff);
@@ -1134,6 +1145,31 @@ export class GameScreen extends Screen {
   }
 
   /**
+   * One puff of a projectile's exhaust (`Projectile.projTrail`).
+   *
+   * Separate from {@link addEffect} because of how the two pools behave under
+   * pressure. `pushFx` retires the OLDEST effect at the cap, which is right for
+   * impacts — the freshest hit is the one worth seeing — but a rocket emits
+   * continuously, so on the shared pool a single shot would sweep out every
+   * spark, splash and blood spray on screen within a few frames. Here the
+   * eviction only ever costs the tail of a plume, which is the one place it
+   * does not read.
+   *
+   * Skipped entirely on the Low profile, which is already dropping smoke.
+   */
+  addTrailEffect(x: number, y: number, type: string): void {
+    if (!Quality.detail) return;
+    while (this.trailFx.length >= Quality.maxFx) {
+      this.trailFx.shift()?.view.destroy({ children: true });
+    }
+    const fx = createEffect(type);
+    fx.view.x = x;
+    fx.view.y = y;
+    this.fxBehind.addChild(fx.view);
+    this.trailFx.push(fx);
+  }
+
+  /**
    * What the ground throws up where a round landed — the surface switch in
    * `Bullet.as:425-470`, on top of the weapon's own impact spark. Soft surfaces
    * only; anything else is hard cover and gets sparks alone.
@@ -1517,13 +1553,27 @@ export class GameScreen extends Screen {
     this.hitboxLabel.y = GAME_HEIGHT - 20;
 
     if (this.pauseBg) {
+      // The baked plates are authored on the SWF's 800x600 stage. Scale them
+      // to fit the live stage and dim only the strips they don't cover; the
+      // plate itself carries the original fade-to-40%-black + corner vignette.
+      const S = Math.min(GAME_WIDTH / 800, GAME_HEIGHT / 600);
+      const pw = 800 * S, ph = 600 * S;
+      const px = (GAME_WIDTH - pw) / 2, py = (GAME_HEIGHT - ph) / 2;
       const g = this.pauseBg;
+      const dim = { color: 0x000000, alpha: 0.4 };
       g.clear();
-      g.rect(0, 0, GAME_WIDTH, GAME_HEIGHT).fill({ color: 0x000000, alpha: 0.4 });
-      g.rect(0, 0, GAME_WIDTH, 90).fill({ color: 0x000000, alpha: 0.28 });
-      g.rect(0, GAME_HEIGHT - 90, GAME_WIDTH, 90).fill({ color: 0x000000, alpha: 0.28 });
-      this.pauseTitle.x = GAME_WIDTH / 2;
-      this.pauseBody.x = Math.round((GAME_WIDTH - DESIGN_WIDTH) / 2);
+      g.rect(0, 0, px, GAME_HEIGHT).fill(dim);
+      g.rect(px + pw, 0, GAME_WIDTH - px - pw, GAME_HEIGHT).fill(dim);
+      g.rect(px, 0, pw, py).fill(dim);
+      g.rect(px, py + ph, pw, GAME_HEIGHT - py - ph).fill(dim);
+
+      this.pausePlateRoot.scale.set(S);
+      this.pausePlateRoot.position.set(Math.round(px), Math.round(py));
+      this.pauseBody.x = 0;
+      this.pauseBody.y = 0;
+      // Original title sits at SWF (357, 22) inside the 800x600 plate.
+      this.pauseTitle.x = Math.round(px + 357 * S);
+      this.pauseTitle.y = Math.round(py + 22 * S);
     }
 
     this.layoutRoundEnd();
@@ -1596,12 +1646,13 @@ export class GameScreen extends Screen {
   }
 
   private updateFx(): void {
-    for (let i = this.fx.length - 1; i >= 0; i--) {
-      const fx = this.fx[i];
-      const done = fx.enterFrame();
-      if (done) {
-        fx.view.destroy({ children: true });
-        this.fx.splice(i, 1);
+    for (const pool of [this.fx, this.trailFx]) {
+      for (let i = pool.length - 1; i >= 0; i--) {
+        const fx = pool[i];
+        if (fx.enterFrame()) {
+          fx.view.destroy({ children: true });
+          pool.splice(i, 1);
+        }
       }
     }
     for (let i = this.tracers.length - 1; i >= 0; i--) {
@@ -1638,12 +1689,28 @@ export class GameScreen extends Screen {
     this.pauseBg = new Graphics();
     o.addChild(this.pauseBg);
 
+    // The original pause/options/scores screens, baked straight from
+    // `PauseScreen` (symbol 562) with dynamic fields stripped. Everything
+    // interactive is positioned in the plate's SWF coordinates below.
+    o.addChild(this.pausePlateRoot);
+    for (const [sub, name] of [
+      ["main", "pause_start"], ["scores", "pause_scores"],
+      ["options", "pause_options"], ["quit", "pause_quit"],
+    ] as const) {
+      const plate = UiArt.r2Sprite(name);
+      if (!plate) continue;
+      plate.visible = false;
+      this.pausePlates[sub] = plate;
+      this.pausePlateRoot.addChild(plate);
+    }
+
     // Top-center frame title (`txt_title`), swapped per active sub-screen.
+    // Baked at the original 26pt-in-a-0.72-scaled-field size (~19px effective).
     const title = new Text({
       text: "PAUSED",
       style: new TextStyle({
-        fill: C_HEADER, fontFamily: FONT_HEADER, fontSize: 26,
-        fontWeight: "700", letterSpacing: 4,
+        fill: C_HEADER, fontFamily: FONT_HEADER, fontSize: 19,
+        fontWeight: "700", letterSpacing: 3,
       }),
     });
     title.alpha = A_HEADER;
@@ -1652,14 +1719,16 @@ export class GameScreen extends Screen {
     o.addChild(title);
     this.pauseTitle = title;
 
-    // Everything below is authored against the 1136-wide design box and lives
-    // in one container, so `resize()` re-centres it with a single assignment.
+    // Everything below is authored in the plate's SWF coordinates (800x600);
+    // `resize()` scales and centres `pausePlateRoot` as one unit.
     const body = this.pauseBody;
-    o.addChild(body);
+    this.pausePlateRoot.addChild(body);
 
     // --- persistent left column: mission title/blurb + the 4 tab buttons --
-    const BX = 70;
-    let ly = 96;
+    // Button anchors and the mission fields are the original placements from
+    // `PauseScreen` frames 10-13 (btn_* at x=162.2, y=455/491/516/553).
+    const BX = 42;
+    let ly = 64;
     const isCampaign = !!SD.matchSettings.campaign;
     const missionTitle = isCampaign ? (SD.matchSettings.matchName || "Mission") : "Quick Match";
     const missionDesc = isCampaign ? (SD.matchSettings.matchDesc || "") : "";
@@ -1667,47 +1736,43 @@ export class GameScreen extends Screen {
     const mTitle = new Text({
       text: missionTitle,
       style: new TextStyle({
-        fill: C_HEADER, fontFamily: FONT_HEADER, fontSize: 20,
+        fill: C_HEADER, fontFamily: FONT_HEADER, fontSize: 16,
         fontWeight: "700", letterSpacing: 1,
       }),
     });
     mTitle.alpha = A_HEADER;
-    mTitle.x = BX; mTitle.y = ly;
+    mTitle.x = 12; mTitle.y = ly;
     body.addChild(mTitle);
-    ly += 30;
+    this.pauseMission.push(mTitle);
+    ly += 24;
 
     if (missionDesc) {
       const mDesc = new Text({
         text: missionDesc,
         style: new TextStyle({
-          fill: C_BODY, fontFamily: FONT_BODY, fontSize: 13,
-          wordWrap: true, wordWrapWidth: 230, lineHeight: 17,
+          fill: C_BODY, fontFamily: FONT_BODY, fontSize: 12,
+          wordWrap: true, wordWrapWidth: 260, lineHeight: 15,
         }),
       });
       mDesc.alpha = A_BODY;
-      mDesc.x = BX; mDesc.y = ly;
+      mDesc.x = 13; mDesc.y = ly;
       body.addChild(mDesc);
-      ly += mDesc.height + 20;
-    } else {
-      ly += 10;
+      this.pauseMission.push(mDesc);
     }
 
-    let by = Math.max(ly, 172);
-    const panelX = 340;
     const tabButtons: Partial<Record<"scores" | "options" | "quit", Raze2Button>> = {};
-    const stack: [string, () => void, ("scores" | "options" | "quit")?][] = [
-      ["Resume Game", () => { Sound.play("R2_ClickGo"); SD.togglePause(); }],
-      ["View Scores", () => { Sound.play("R2_Click"); this.showPauseSub("scores"); }, "scores"],
-      ["Options", () => { Sound.play("R2_Click"); this.showPauseSub("options"); }, "options"],
-      ["Quit Game", () => { Sound.play("R2_Click"); this.showPauseSub("quit"); }, "quit"],
+    const stack: [string, () => void, number, ("scores" | "options" | "quit")?][] = [
+      ["Resume Game", () => { Sound.play("R2_ClickGo"); SD.togglePause(); }, 441.6],
+      ["View Scores", () => { Sound.play("R2_Click"); this.showPauseSub("scores"); }, 477.6, "scores"],
+      ["Options", () => { Sound.play("R2_Click"); this.showPauseSub("options"); }, 502.6, "options"],
+      ["Quit Game", () => { Sound.play("R2_Click"); this.showPauseSub("quit"); }, 539.6, "quit"],
     ];
-    for (const [label, onClick, tab] of stack) {
-      const btn = new Raze2Button(label, { width: 240, height: 44, onClick });
+    for (const [label, onClick, by, tab] of stack) {
+      const btn = new Raze2Button(label, { width: 245, height: 28, onClick });
       btn.view.x = BX; btn.view.y = by;
       btn.view.on("pointerover", () => Sound.play("R2_Click"));
       body.addChild(btn.view);
       if (tab) tabButtons[tab] = btn;
-      by += 56;
     }
     this.pauseTabButtons = tabButtons as Record<"scores" | "options" | "quit", Raze2Button>;
 
@@ -1717,43 +1782,28 @@ export class GameScreen extends Screen {
     this.pauseMain = main;
 
     // --- View Scores sub-screen ------------------------------------------
+    // The plate carries the backdrop; the table is the live standings. Rows are
+    // scaled to the original `barsCont` block (473px wide at x=314.8, y=64.5).
     const scores = new Container();
     scores.visible = false;
     body.addChild(scores);
     this.pauseScores = scores;
 
-    const boardW = 700;
-    const sp = new Raze2Panel(boardW + 40, 470, { accent: C_OPTIONS_GREEN });
-    sp.view.x = panelX - 20; sp.view.y = 80;
-    scores.addChild(sp.view);
-
     const holder = new Container();
-    holder.x = panelX; holder.y = 96;
+    holder.x = 306; holder.y = 84;
+    holder.scale.set(0.66);
     scores.addChild(holder);
     this.pauseScoreHolder = holder;
 
     // --- Quit confirm sub-screen (doc 12 §2.2, `btn_Yes`/`btn_No`) --------
+    // The "Are you sure you want to quit?" copy is part of the baked plate.
     const quit = new Container();
     quit.visible = false;
     body.addChild(quit);
     this.pauseQuit = quit;
 
-    const qp = new Raze2Panel(420, 200, { accent: C_OPTIONS_GREEN });
-    qp.view.x = panelX - 20; qp.view.y = 200;
-    quit.addChild(qp.view);
-
-    const qText = new Text({
-      text: "Quit to the main menu?",
-      style: new TextStyle({
-        fill: C_HEADER, fontFamily: FONT_HEADER, fontSize: 20, fontWeight: "700",
-      }),
-    });
-    qText.alpha = A_HEADER;
-    qText.x = panelX; qText.y = 232;
-    quit.addChild(qText);
-
     const yesBtn = new Raze2Button("Yes", {
-      width: 160, height: 40,
+      width: 245, height: 28,
       onClick: () => {
         Sound.play("R2_ClickGo");
         void import("../screens/MenuScreen").then(({ MenuScreen }) =>
@@ -1761,98 +1811,64 @@ export class GameScreen extends Screen {
         );
       },
     });
-    yesBtn.view.x = panelX; yesBtn.view.y = 310;
+    yesBtn.view.x = 394.3; yesBtn.view.y = 317.4;
     yesBtn.view.on("pointerover", () => Sound.play("R2_Click"));
     quit.addChild(yesBtn.view);
 
     // "No" cancels back to View Scores, not "main" (`PauseScreen.as:514-516`).
     const noBtn = new Raze2Button("No", {
-      width: 160, height: 40, reverse: true,
+      width: 245, height: 28, reverse: true,
       onClick: () => { Sound.play("R2_ClickBack"); this.showPauseSub("scores"); },
     });
-    noBtn.view.x = panelX + 240; noBtn.view.y = 310;
+    noBtn.view.x = 148.2; noBtn.view.y = 317.1;
     noBtn.view.on("pointerover", () => Sound.play("R2_Click"));
     quit.addChild(noBtn.view);
 
     // --- Options sub-screen ----------------------------------------------
+    // Labels/descriptions are baked into `pause_options`; only the value words
+    // are live toggles, at the original `txt_*` coordinates (frame 13).
     const options = new Container();
     options.visible = false;
     body.addChild(options);
     this.pauseOptions = options;
 
-    const op = new Raze2Panel(460, 470, { accent: C_OPTIONS_GREEN });
-    op.view.x = panelX - 20; op.view.y = 80;
-    options.addChild(op.view);
-
-    const oTitle = new Text({
-      text: "OPTIONS",
-      style: new TextStyle({
-        fill: C_HEADER, fontFamily: FONT_HEADER, fontSize: 26,
-        fontWeight: "700", letterSpacing: 3,
-      }),
-    });
-    oTitle.alpha = A_HEADER;
-    oTitle.x = panelX; oTitle.y = 96;
-    options.addChild(oTitle);
-
-    const ox = panelX;
-    let oy = 150;
-    const step = 62;
-    // Quality / Glows / Sounds / Music bind to the live SD model; changes apply
-    // immediately (doc 14 §4). Pause Blur re-applies to the frozen frame now.
-    this.addPauseToggle(options, "Quality", ox, oy,
-      ["Low", "Medium", "High", "Ultra"],
+    this.addPauseToggle(options, "Quality", 441.6, 134,
+      ["Low", "Medium", "High", "Max"],
       Math.max(0, QUALITY_LEVELS.indexOf(SD.qual)),
       (i) => SD.setQuality(QUALITY_LEVELS[i]));
-    oy += step;
-    this.addPauseToggle(options, "Glows", ox, oy, ["Off", "On"],
+    this.addPauseToggle(options, "Glows", 481.6, 248, ["Off", "On"],
       SD.noGlow ? 0 : 1, (i) => SD.setNoGlow(i === 0));
-    oy += step;
-    this.addPauseToggle(options, "Sounds", ox, oy, ["Off", "On"],
+    this.addPauseToggle(options, "Sounds", 381.6, 480, ["Off", "On"],
       SD.sound ? 1 : 0, (i) => { SD.sound = i === 1; SD.save(); });
-    oy += step;
-    this.addPauseToggle(options, "Music", ox, oy, ["Off", "On"],
+    this.addPauseToggle(options, "Music", 381.6, 531, ["Off", "On"],
       SD.music ? 1 : 0, (i) => {
         SD.music = i === 1; SD.save();
-        if (SD.music) Sound.setMusic(MATCH_MUSIC[Math.floor(Math.random() * MATCH_MUSIC.length)]);
+        if (SD.music) Sound.playRandomSong();
         else Sound.stopMusic();
       });
-    oy += step;
-    this.addPauseToggle(options, "Pause Blur", ox, oy, ["Off", "On"],
+    this.addPauseToggle(options, "Pause Blur", 591.5, 531, ["Off", "On"],
       this.pauseBlur ? 1 : 0, (i) => {
         this.pauseBlur = i === 1;
         SD.setPauseBlur(this.pauseBlur);
         this.applyPauseBlur(SD.paused && this.pauseBlur);
       });
 
-    const oBack = new Raze2Button("Back", {
-      width: 160, height: 40,
-      onClick: () => { Sound.play("R2_ClickBack"); this.showPauseSub("main"); },
-    });
-    oBack.view.x = panelX; oBack.view.y = 500;
-    oBack.view.on("pointerover", () => Sound.play("R2_Click"));
-    options.addChild(oBack.view);
-
     this.pauseOverlay = o;
     this.view.addChild(o);
   }
 
-  /** A labelled Raze2Toggle row inside the pause Options panel. */
+  /** A live value-row toggle inside the pause Options panel. The category
+   *  labels ("QUALITY", "SOUNDS"...) are baked into `pause_options`; only the
+   *  value words are runtime, at the original `txt_*` coordinates. */
   private addPauseToggle(
-    parent: Container, label: string, x: number, y: number,
+    parent: Container, _label: string, x: number, y: number,
     words: string[], selected: number, onChange: (i: number) => void,
   ): void {
-    const t = new Text({
-      text: label,
-      style: new TextStyle({ fill: C_LABEL, fontFamily: FONT_VALUE, fontSize: 14 }),
-    });
-    t.alpha = A_LABEL; t.x = x; t.y = y;
-    parent.addChild(t);
     const toggle = new Raze2Toggle(words, selected, (i) => {
       Sound.play("R2_Click");
       onChange(i);
-    });
-    toggle.view.x = x; toggle.view.y = y + 20;
+    }, { fontSize: 13, gap: 24 });
+    toggle.view.x = x; toggle.view.y = y;
     parent.addChild(toggle.view);
   }
 
@@ -1866,6 +1882,11 @@ export class GameScreen extends Screen {
     this.pauseScores.visible = sub === "scores";
     this.pauseOptions.visible = sub === "options";
     this.pauseQuit.visible = sub === "quit";
+    // One plate per sub-screen (the baked PauseScreen frame for that state).
+    for (const [key, plate] of Object.entries(this.pausePlates)) {
+      if (plate) plate.visible = key === sub;
+    }
+    for (const t of this.pauseMission) if (t) t.visible = sub === "main" || sub === "scores";
     this.pauseTitle.text = sub === "scores" ? "VIEW SCORES"
       : sub === "options" ? "OPTIONS"
       : sub === "quit" ? "QUIT GAME"
@@ -2004,6 +2025,10 @@ export class GameScreen extends Screen {
     }
     if (playerWon && this.player.score.pistolOnly) Achievements.addAch("pistol");
     this.buildRoundEnd(playerWon);
+    // The card owns the screen now: hide the in-match HUD (timer, score bars,
+    // kill feed, crosshair, name tags) so nothing draws over its title — the
+    // source's gamedone plate fills the whole 800x600 stage.
+    this.applySSmode(true);
     return true;
   }
 
@@ -2020,13 +2045,18 @@ export class GameScreen extends Screen {
     o.eventMode = "none";
     o.addChild(this.roundEndBg);
 
+    // The original `gamedone` screen (title + final standings) as backdrop.
+    this.roundEndPlate = UiArt.r2Sprite("pause_done");
+    if (this.roundEndPlate) o.addChild(this.roundEndPlate);
+
     this.roundEndHeader = new Text({
-      text: playerWon ? "VICTORY" : "DEFEAT",
+      text: playerWon ? "VICTORY!" : "DEFEAT!",
       style: new TextStyle({
-        fill: playerWon ? C_VICTORY : C_DANGER,
-        fontFamily: FONT_HEADER, fontSize: 52, fontWeight: "700", letterSpacing: 8,
+        fill: C_HEADER, fontFamily: FONT_HEADER, fontSize: 20, fontWeight: "700",
+        letterSpacing: 2,
       }),
     });
+    this.roundEndHeader.alpha = A_HEADER;
     this.roundEndHeader.anchor.set(0.5, 0);
     o.addChild(this.roundEndHeader);
 
@@ -2045,15 +2075,35 @@ export class GameScreen extends Screen {
     const board = this.roundEndBoard;
     if (!this.roundEnd || !header || !board) return;
 
-    this.roundEndBg.clear();
-    this.roundEndBg.rect(0, 0, GAME_WIDTH, GAME_HEIGHT).fill({ color: 0x000000, alpha: 0.55 });
+    // The baked gamedone plate is authored on the SWF's 800x600 stage; fit and
+    // centre it like the pause plates and dim only the strips around it. The
+    // title and standings then sit at the original `txt_title` / `barsCont`
+    // coordinates.
+    const S = Math.min(GAME_WIDTH / 800, GAME_HEIGHT / 600);
+    const pw = 800 * S, ph = 600 * S;
+    const px = (GAME_WIDTH - pw) / 2, py = (GAME_HEIGHT - ph) / 2;
+    const g = this.roundEndBg;
+    g.clear();
+    if (this.roundEndPlate) {
+      const meta = UiArt.meta("pause_done");
+      this.roundEndPlate.scale.set(S / (meta?.scale ?? 1.5));
+      this.roundEndPlate.position.set(Math.round(px), Math.round(py));
+      const dim = { color: 0x000000, alpha: 0.55 };
+      g.rect(0, 0, px, GAME_HEIGHT).fill(dim);
+      g.rect(px + pw, 0, GAME_WIDTH - px - pw, GAME_HEIGHT).fill(dim);
+      g.rect(px, 0, pw, py).fill(dim);
+      g.rect(px, py + ph, pw, GAME_HEIGHT - py - ph).fill(dim);
+    } else {
+      g.rect(0, 0, GAME_WIDTH, GAME_HEIGHT).fill({ color: 0x000000, alpha: 0.55 });
+    }
 
-    const GAP = 30;
-    const top = Math.round((GAME_HEIGHT - (header.height + GAP + board.totalHeight)) / 2);
-    header.x = GAME_WIDTH / 2;
-    header.y = top;
-    board.view.x = Math.round((GAME_WIDTH - ROUND_END_BOARD_W) / 2);
-    board.view.y = top + header.height + GAP;
+    // Original gamedone coordinates: the title field is centred at x=390 and
+    // the standings container `barsCont` sits at (159.2, 65.5), both 1:1.
+    header.x = Math.round(px + 390 * S);
+    header.y = Math.round(py + 30 * S);
+    board.view.x = Math.round(px + 159.2 * S);
+    board.view.y = Math.round(py + 65.5 * S);
+    board.view.scale.set(S);
   }
 
   /** Fade the card up over the still-running arena, then hand back. */

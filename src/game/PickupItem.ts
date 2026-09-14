@@ -71,6 +71,20 @@ const LETTERS: Record<PickupKind, string> = {
 
 const FRAMES_PER_SEC = 30;
 
+/**
+ * Logical px per baked px for the power-up floater — 1:1.
+ *
+ * `NodePickup.EnterFrame` hands the atlas bit to `BitScreen.paint`, which is a
+ * `copyPixels` blit: no scaling, so a floater is exactly the size of the
+ * `DefineSprite_1719` art. That art measures 52x52 at 1x (rendered and
+ * measured, not inferred), and `tools/pickups/bake.py` supersamples by 4 and
+ * downsamples again before saving — so the shipped PNGs are already 1x.
+ *
+ * This used to normalise every icon to ~26px tall, i.e. half size. See
+ * PickupWeapon's `GUN_ART_SCALE` for the one pickup bake that isn't 1x.
+ */
+const ICON_ART_SCALE = 1;
+
 interface StatusLike {
   addShield(frac: number): void;
   heal(frac: number): void;
@@ -179,9 +193,7 @@ export class PickupItem {
     if (tex) {
       this.icon = new Sprite(tex);
       this.icon.anchor.set(0.5);
-      // Normalise to a consistent on-map footprint (~26 px tall).
-      const s = Math.min(1, 26 / (tex.height || 26));
-      this.icon.scale.set(s);
+      this.icon.scale.set(ICON_ART_SCALE);
       this.bobC.addChild(this.icon);
       return;
     }
@@ -250,6 +262,7 @@ export class PickupItem {
       case "jug":
         // Unit.setJug applies the buff, tints the name bar and announces it.
         unit.setJug?.();
+        unit.game.addEffect(unit.x, unit.y, "getJug");
         break;
     }
   }

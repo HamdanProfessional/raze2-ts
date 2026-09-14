@@ -30,6 +30,7 @@ import { MultiplayerScreen } from "./MultiplayerScreen";
 import { CampaignScreen } from "./CampaignScreen";
 import { ArmoryScreen } from "./ArmoryScreen";
 import { StatsScreen } from "./StatsScreen";
+import { AchievementsScreen } from "./AchievementsScreen";
 import { InfoScreen } from "./InfoScreen";
 import { OptionsScreen } from "./OptionsScreen";
 
@@ -64,6 +65,8 @@ export class MenuScreen extends Screen {
   constructor(...args: ConstructorParameters<typeof Screen>) {
     super(...args);
 
+    const arg = args[1] as { noMusic?: boolean } | undefined;
+
     this.view.addChild(makeBackground(UiArt.getTexture("menu"), 0x0d1014));
 
     this.view.addChild(makeScrim(0x000000, 0.42));
@@ -77,7 +80,9 @@ export class MenuScreen extends Screen {
     this.buildOptions();
 
     window.addEventListener("keydown", this.onKeyDown);
-    Sound.setMusic("R2_Menu");
+    // The Intro hands off with `noMusic:true` so `M_MenuIntro` carries into the
+    // front-end (`Menu.as:109`); a direct visit cues the menu track itself.
+    if (!arg?.noMusic) Sound.setMusic("R2_Menu");
     this.maybeShowUnlock();
   }
 
@@ -181,7 +186,7 @@ export class MenuScreen extends Screen {
       { label: "Campaign", action: () => this.go(CampaignScreen) },
       { label: "Quick Match", action: () => this.go(PlayScreen) },
       { label: "Armory", action: () => this.go(ArmoryScreen) },
-      { label: "Achievements", action: () => this.go(StatsScreen) },
+      { label: "Achievements", action: () => this.go(AchievementsScreen) },
       { label: "Options", action: () => this.go(OptionsScreen) },
       { label: "Credits", action: () => this.go(InfoScreen) },
       { label: "Play More Games", action: () => SD.urlSponsor() },

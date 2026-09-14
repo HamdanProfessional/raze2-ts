@@ -13,22 +13,13 @@ import RAZE2_MAPS from "./raze2maps.json";
  * texture in the cache.
  */
 
-// Level id -> asset filename (relative to ASSET_BASE/bg).
-const FILES: Record<string, string> = {
-  city: "city.jpg",
-  space: "space.jpg",
-  toxic: "toxic.png",
-  pit: "pit.png",
-};
+// Level id -> asset filename (relative to ASSET_BASE/bg). Only the Sandbox
+// paints a code-made backdrop; every other level ships SWF art.
+const FILES: Record<string, string> = {};
 
 // Authentic full-level art (bg+foreground) extracted from the SWF, keyed
-// `lvl_<id>`. Present only for levels whose collision has been matched.
-const LEVEL_FILES: Record<string, string> = {
-  city: "levels/city.png",
-  toxic: "levels/toxic.png",
-  pit: "levels/pit.png",
-  space: "levels/space.png",
-};
+// `lvl_<id>`. The Sandbox has none (see `buildFromData`).
+const LEVEL_FILES: Record<string, string> = {};
 
 const RAZE2 = RAZE2_MAPS as unknown as Record<string, { bg?: string }>;
 

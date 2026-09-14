@@ -70,6 +70,24 @@ const FLOAT_Y = 40;
 const BOB_AMPLITUDE = 4;
 const BOB_DEG_PER_FRAME = 5;
 
+/**
+ * Logical px per baked px for the floor art. `BitScreen.paint` is a
+ * `copyPixels` blit — no scaling — and `BH.getBit(type, id, 1)`'s third
+ * argument is a frame index, not a size. So a gun lying on the floor is
+ * **exactly** the size of the same gun in a player's hands.
+ *
+ * The stand is baked at 1x (`tools/pickups/bake_base.py` supersamples by 4 and
+ * downsamples again before saving). The gun icons are not: every one of the 34
+ * guns that also has an arm sheet has pickup ink exactly 2.00x its `armAnim`
+ * cell ink at `scale`, so they go on screen at half.
+ *
+ * The gun used to normalise to a 56px longest side, which — with a 238px canvas
+ * shared by every weapon — was a flat 0.235, and drew floor weapons at 47% of
+ * the held ones.
+ */
+const GUN_ART_SCALE = 0.5;
+const BASE_ART_SCALE = 1;
+
 interface UnitLike {
   x: number;
   y: number;
@@ -89,13 +107,16 @@ export class PickupWeapon {
   private currentType = "";
   private pickedUp = false;
 
-  constructor(spec: PickupWeaponSpec, private weaponsMode: number) {
+  constructor(spec: PickupWeaponSpec, private weaponsMode: number, lean = 0) {
     this.spec = spec;
     this.resolveType();
     this.draw();
     this.view.addChild(this.g);
     this.view.x = spec.x;
     this.view.y = spec.y;
+    // Sit with the platform: the stand and the hovering gun tilt to the floor
+    // lean (the node art is authored axis-aligned; on a ramp it should follow).
+    this.view.rotation = lean;
   }
 
   /** Touch attempt by `unit`; returns true if it was picked up. */
@@ -167,6 +188,7 @@ export class PickupWeapon {
     if (btex) {
       this.base = new Sprite(btex);
       this.base.anchor.set(0.5, 1);
+      this.base.scale.set(BASE_ART_SCALE);
       this.view.addChild(this.base);
     }
     const wtex = PickupWeaponArt.getTexture(this.currentType);
@@ -177,10 +199,7 @@ export class PickupWeapon {
       }
       this.icon = new Sprite(wtex);
       this.icon.anchor.set(0.5);
-      // Size the gun so its longest side reads clearly on the map (~2x the old
-      // 30px icon), keeping the aspect ratio of the authentic Raze 2 gun art.
-      const s = 56 / Math.max(wtex.width || 56, wtex.height || 56);
-      this.icon.scale.set(s);
+      this.icon.scale.set(GUN_ART_SCALE);
       this.icon.y = -FLOAT_Y;
       // Onto `view`, not `g`: Pixi v8 deprecates parenting children to a
       // Graphics. `g` is already in `view`, so the icon still lands on top of

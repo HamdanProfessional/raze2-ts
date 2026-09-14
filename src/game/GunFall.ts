@@ -13,6 +13,6 @@
  * the bounce is faked by applying a strong vertical impulse from the unit's
  * last jump velocity, and the physics body is created right after construction.
  * The visual is a `GunView` returned by the gunArtProvider (set in
- * `assets/Parts.ts` or in `GameScreen.ts`). No per-frame movieclip needed.
+ * `assets/GunDrop.ts` or in `GameScreen.ts`). No per-frame movieclip needed.
  */
 export {};

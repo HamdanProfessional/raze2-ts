@@ -1,4 +1,4 @@
-import { Container, Graphics, Text, TextStyle } from "pixi.js";
+import { Container, Graphics, Sprite, Text, TextStyle } from "pixi.js";
 import { Screen } from "../core/Screen";
 import { GAME_WIDTH, GAME_HEIGHT } from "../core/Config";
 import { SD } from "../state/SD";
@@ -115,29 +115,48 @@ export class ScoreBoard {
     const c = new Container();
     c.y = y;
 
-    const bg = new Graphics();
-    if (row.isHeader) {
-      // Neutral "h0" column-title header — near-black, doc 12 §2.6.
-      bg.rect(0, 0, this.width, ROW_H).fill({ color: C_PANEL_FILL, alpha: 0.9 });
-      bg.rect(0, ROW_H - 1, this.width, 1).fill({ color: C_PANEL_HAIRLINE, alpha: 0.9 });
+    // Prefer the baked `ScoreBoardBar` row art (one frame per team/kind); the
+    // Graphics slab below is the headless/no-texture fallback.
+    const team = Math.min(4, Math.max(0, row.team | 0));
+    const rigKey = row.isHeader ? "score_h0"
+      : row.isBanner ? `score_h${team}`
+      : `score_${row.ai ? "a" : "p"}${team}`;
+    const rigTex = UiArt.r2(rigKey);
+    if (rigTex) {
+      const sp = new Sprite(rigTex);
+      sp.width = this.width;
+      sp.height = ROW_H;
+      sp.alpha = row.isHeader ? A_HEADER : row.ai ? 0.7 : 1;
+      c.addChild(sp);
     } else {
-      const shade = rowShade(row.team, !!row.isBanner);
-      // Two stacked flat fills + a lighter mid-band, approximating the
-      // source's soft vertical gradient banner (doc 12 §2.5).
-      bg.rect(0, 0, this.width, ROW_H).fill({ color: shade, alpha: 0.298 });
-      bg.rect(0, ROW_H * 0.18, this.width, ROW_H * 0.64).fill({ color: shade, alpha: 0.498 });
-      bg.rect(0, 0, this.width, ROW_H).stroke({ color: shade, width: 1, alpha: 0.6 });
-      // Alternating row striping for plain rows only.
-      if (!row.isBanner && zebra % 2 === 1) {
-        bg.rect(0, 0, this.width, ROW_H).fill({ color: 0x000000, alpha: 0.16 });
+      const bg = new Graphics();
+      if (row.isHeader) {
+        // Neutral "h0" column-title header — near-black, doc 12 §2.6.
+        bg.rect(0, 0, this.width, ROW_H).fill({ color: C_PANEL_FILL, alpha: 0.9 });
+        bg.rect(0, ROW_H - 1, this.width, 1).fill({ color: C_PANEL_HAIRLINE, alpha: 0.9 });
+      } else {
+        const shade = rowShade(row.team, !!row.isBanner);
+        // Two stacked flat fills + a lighter mid-band, approximating the
+        // source's soft vertical gradient banner (doc 12 §2.5).
+        bg.rect(0, 0, this.width, ROW_H).fill({ color: shade, alpha: 0.298 });
+        bg.rect(0, ROW_H * 0.18, this.width, ROW_H * 0.64).fill({ color: shade, alpha: 0.498 });
+        bg.rect(0, 0, this.width, ROW_H).stroke({ color: shade, width: 1, alpha: 0.6 });
+        // Alternating row striping for plain rows only.
+        if (!row.isBanner && zebra % 2 === 1) {
+          bg.rect(0, 0, this.width, ROW_H).fill({ color: 0x000000, alpha: 0.16 });
+        }
       }
+      c.addChild(bg);
     }
-    c.addChild(bg);
 
     const fill = row.isHeader || row.isBanner ? C_HEADER : 0xffffff;
     const alpha = row.isHeader ? A_HEADER : row.ai ? 0.7 : 1;
     const font = row.isHeader || row.isBanner ? FONT_HEADER : FONT_VALUE;
-    const size = row.isHeader ? 14 : row.isBanner ? 16 : 15;
+    // Column positions are fractions of the bar width, so the type scales with
+    // it: the round-end card uses the original ScoreBoardBar width (474) while
+    // the pause scoreboard is wider, and fixed sizes collided at 474.
+    const k = Math.max(0.6, Math.min(1.4, this.width / 700));
+    const size = Math.round((row.isHeader ? 14 : row.isBanner ? 16 : 15) * k);
 
     const cell = (text: string, x: number, anchor = 0, colorOverride?: number): Text => {
       const t = new Text({

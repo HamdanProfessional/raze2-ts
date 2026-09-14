@@ -1,5 +1,6 @@
 import { Container, Graphics } from "pixi.js";
 import { UT } from "../core/UT";
+import { BhBody } from "./Fx";
 import { Sound } from "../audio/Sounds";
 import { SD } from "../state/SD";
 import { canHarm } from "./Match";
@@ -32,6 +33,16 @@ export class Projectile {
   private trailG = new Graphics();
   private trail: { x: number; y: number }[] = [];
   private readonly kind: "rocket" | "grenade" | "flame" | "other";
+  /**
+   * The round's own SWF clip (`params[0]`), when it has one. A `Bullet_Proj_*`
+   * carries no body art in the original — what you see flying is this effect,
+   * respawned at every collision substep (`Bullet_Proj_Basic.as:39`), which is
+   * why a grenade's tumble and a rocket's exhaust are the same mechanism. The
+   * port plays it as one clip it steps itself rather than a stream of spawns,
+   * so a fast round costs one sprite instead of fourteen a second.
+   */
+  private body: BhBody | null = null;
+  private bodyFrame = 0;
   private spin = 0;
   /** Core / glow body tints, from the weapon's Raze 2 trail effect (doc 04). */
   private readonly core: number;
@@ -98,7 +109,17 @@ export class Projectile {
 
     this.view.addChild(this.trailG);
     this.view.addChild(this.g);
-    this.drawBody();
+    // Prefer the authored clip. `drawBody` is a hand-drawn stand-in from before
+    // the atlas existed and is only reached now by rounds the SWF has no art
+    // for — a mine (no `params[0]` at all) or the Blaster, whose `photon_shot`
+    // symbol FFDec could not export.
+    this.body = def.projTrail ? BhBody.create(def.projTrail) : null;
+    if (this.body) {
+      this.view.addChild(this.body.view);
+      this.g.visible = false;
+    } else {
+      this.drawBody();
+    }
     this.view.x = x;
     this.view.y = y;
   }
@@ -145,10 +166,19 @@ export class Projectile {
       this.y = host.y + this.stuckDY;
       this.view.x = this.x;
       this.view.y = this.y;
-      this.spin += 0.15;
-      this.g.rotation = this.spin;
-      // Blink faster as it is about to blow.
-      this.g.alpha = this.fuse % 8 < 4 ? 1 : 0.45;
+      // Blink faster as it is about to blow. A stuck round that has its own
+      // clip keeps animating in place; only the drawn stand-in needs spinning
+      // to read as a tumbling object.
+      const blink = this.fuse % 8 < 4 ? 1 : 0.45;
+      if (this.body) {
+        this.bodyFrame++;
+        this.body.setFrame(this.bodyFrame % this.body.frames);
+        this.body.view.alpha = blink;
+      } else {
+        this.spin += 0.15;
+        this.g.rotation = this.spin;
+        this.g.alpha = blink;
+      }
       if (--this.fuse <= 0) this.explode();
       return;
     }
@@ -198,6 +228,20 @@ export class Projectile {
 
     this.view.x = this.x;
     this.view.y = this.y;
+    if (this.body) {
+      // `Effect.as` never turns a clip to face anything: the rotation is one of
+      // `rotAmt` pre-baked variants rolled at spawn, so steering the container
+      // as well would rotate art that is already rotated. The clip loops —
+      // a rocket outlives its 36-frame exhaust puff many times over.
+      this.bodyFrame++;
+      this.body.setFrame(this.bodyFrame % this.body.frames);
+      // Every other substep leaves a puff behind, thinned from the original's
+      // one-per-substep because the port pays a sprite where the SWF blits into
+      // a single bitmap. They go in their own pool (see `addTrailEffect`) so an
+      // exhaust plume cannot evict the impacts and blood.
+      if (this.life % 2 === 0) this.game.addTrailEffect?.(this.x, this.y, this.def.projTrail!);
+      return;
+    }
     this.view.rotation = Math.atan2(this.vy, this.vx);
     if (this.kind === "grenade") {
       this.spin += 0.3;
@@ -250,7 +294,10 @@ export class Projectile {
         // blade rides the surface, and leave a dirt spurt.
         if (!this.burrowing) { this.burrowing = true; this.dmgMult = 2; }
         this.vy -= 0.2;
-        if (this.life % 3 === 0) this.game.addEffect(this.x, this.y, "bullet", this.glowC);
+        // `Bullet.as:445`: a burrowing round throws dirt, not sparks — the
+        // wall-hit branch swaps `effHit` for `mud_splash` whenever `extra.burrow`
+        // is set, whatever surface it is actually ploughing through.
+        if (this.life % 3 === 0) this.game.addEffect(this.x, this.y, "mud_splash");
         // fall through to the unit-hit scan below (no explode / no stop).
       } else if (this.def.bounces) {
         this.doBounce();
@@ -350,13 +397,26 @@ export class Projectile {
     this.view.y = this.y;
     this.trail.length = 0;
     this.trailG.clear();
+    // `mine` is its own BH clip — the laid charge, not an impact burst — and it
+    // is what `Bullet_Proj_Mine` shows once the round comes to rest. Its three
+    // frames are the armed states, so the blink below drives alpha rather than
+    // the frame.
+    this.body ??= BhBody.create("mine");
+    if (this.body) {
+      if (!this.body.view.parent) this.view.addChild(this.body.view);
+      this.body.setFrame(0);
+      this.g.visible = false;
+      return;
+    }
     this.g.clear();
     this.g.circle(0, 0, 3).fill({ color: 0xff5544 }).stroke({ color: 0x882222, width: 1 });
   }
 
   /** Per-frame logic for an armed mine: blink, proximity trigger, lifetime. */
   private mineTick(): void {
-    this.g.alpha = this.life % 20 < 10 ? 1 : 0.4;
+    const blink = this.life % 20 < 10 ? 1 : 0.4;
+    if (this.body) this.body.view.alpha = blink;
+    else this.g.alpha = blink;
     if (this.life > (this.def.mineLife ?? 300)) { this.explode(); return; }
     for (const u of this.game.units) {
       if (u === this.owner || u.status.dead) continue;

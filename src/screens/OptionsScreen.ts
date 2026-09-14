@@ -67,14 +67,14 @@ const PRESETS: {
 ];
 
 /**
- * Three even columns on a 60px margin with a shared top and bottom, replacing
- * the hand-placed 300/300/280-wide panels at x=60/430/790 whose gaps (70/60/66)
- * and heights (420/380/380) were all slightly different.
+ * Three even columns splitting the stage edge to edge (24px margins), with a
+ * shared top and bottom — the source's hand-placed 300/300/280-wide panels at
+ * x=60/430/790 left side gutters when the window grew.
  */
 const COL_GAP = 28;
 /** Read at build time, not import time — the stage size is the window's. */
-const colW = () => Math.floor((GAME_WIDTH - 120 - COL_GAP * 2) / 3);
-const colX = () => [60, 60 + colW() + COL_GAP, 60 + (colW() + COL_GAP) * 2];
+const colW = () => Math.floor((GAME_WIDTH - 48 - COL_GAP * 2) / 3);
+const colX = () => [24, 24 + colW() + COL_GAP, 24 + (colW() + COL_GAP) * 2];
 const PANEL_Y = 110;
 const PANEL_H = 420;
 

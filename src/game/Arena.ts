@@ -214,12 +214,8 @@ export interface WayNode {
 
 /** Playable levels, with display names for the menu. */
 export const LEVELS: { id: string; name: string }[] = [
-  { id: "city", name: "City" },
-  { id: "space", name: "Space Station" },
-  { id: "toxic", name: "Toxic Waste" },
-  { id: "pit", name: "The Pit" },
-  // Raze 2 maps (pixel-mask collision, extracted from raze-2.swf). Namespaced
-  // `r2_` so their ids don't collide with the Raze 1 levels above.
+  // Raze 2 maps (pixel-mask collision, extracted from raze-2.swf), namespaced
+  // `r2_`.
   { id: "r2_jungle", name: "Jungle" },
   { id: "r2_jungle2", name: "Jungle II" },
   { id: "r2_city", name: "City (Raze 2)" },
@@ -320,8 +316,6 @@ export class Arena {
   /** Draw-origin of the sky (top-left of the oversized gradient, world px). */
   private skyHomeX = 0;
   private skyHomeY = 0;
-  /** Static darkened tint painted over every water cell. */
-  private waterGfx?: Graphics;
   /** Animated surface shimmer over the water (gated by the Lights setting). */
   private waterShimmer?: Graphics;
   /** The simulated wave surface (`Water.as`), null on maps with no water. */
@@ -343,10 +337,9 @@ export class Arena {
   private authentic = false;
 
   constructor() {
-    this.level = String(SD.matchSettings?.level ?? "city");
+    this.level = String(SD.matchSettings?.level ?? "r2_jungle");
 
-    // Raze 2 maps are namespaced `r2_<key>` so their ids can't shadow the Raze 1
-    // levels (both have a "city"). Only the prefixed form uses the mask path.
+    // Raze 2 maps are namespaced `r2_<key>`.
     const r2 = this.level.startsWith("r2_")
       ? (RAZE2_MAPS as unknown as Record<string, Raze2MapDef>)[this.level.slice(3)]
       : undefined;
@@ -356,13 +349,12 @@ export class Arena {
       return; // buildRaze2Map spawns its own pickups from node data
     } else if (data) {
       this.buildFromData(this.level, data);
-    } else {
-      this.addBackground(this.level);
-      this.view.addChild(this.geo);
-      this.buildLevel(this.level);
-      this.drawGeometry();
+      this.spawnPickups(this.level);
+      return;
     }
-    this.spawnPickups(this.level);
+    // Unknown id (an old save, say): fall back to a Raze 2 map.
+    this.level = "r2_jungle";
+    this.buildRaze2Map(this.level, (RAZE2_MAPS as unknown as Record<string, Raze2MapDef>).jungle);
   }
 
   /**
@@ -815,7 +807,6 @@ export class Arena {
     const wm = this.wallMask;
     if (!wm) return;
     const step = WATER_STEP;
-    const g = new Graphics();
     const top = new Map<number, number>();
     const bottom = new Map<number, number>();
     let any = false;
@@ -824,21 +815,20 @@ export class Arena {
         const s = wm.surfaceTypeAt(x, y);
         if (!s || (s.type !== "waterShallow" && s.type !== "waterDeep")) continue;
         any = true;
-        g.rect(x, y, step + 1, step + 1);
         if (!top.has(x)) top.set(x, y); // first (topmost) hit in column
         bottom.set(x, y + step);
       }
     }
-    if (!any) {
-      g.destroy();
-      return;
-    }
-    // Darkened water tint (the plane the reflection and the actors sit in
-    // front of), then the live surface on top of it.
-    g.fill({ color: 0x0a2a3a, alpha: 0.3 });
+    if (!any) return;
     this.hasWater = true;
-    this.waterGfx = g;
-    this.view.addChild(g);
+
+    // No tint layer. `Arena.as:832` hands the authored `waterMC` to
+    // `Water.setWater`, which *hides* it (`MC.visible = false`) and simulates
+    // the surface alone — the body of water is painted into the map art, so
+    // anything drawn over it is a second, wrong one. The port used to paint the
+    // colour-keyed cells here, and because the scan is a 12px grid of
+    // `step + 1` rects it showed up as exactly that: a staircase-edged slab
+    // with a visible lattice where the 1px overlaps doubled the alpha.
 
     // `Arena.init` only simulates a surface when the level author dropped a
     // `waterMC` on the frame, and among the shipped maps only ocean has one
@@ -901,7 +891,7 @@ export class Arena {
         // On the ground, not 14px above it: the node's own art is the lit stand
         // the gun floats over, and it is anchored by its base.
         const spec: PickupWeaponSpec = { id: `weap_${kind}_${x}`, type, x, y: gy, respawnSecs: respawn };
-        const p = new PickupWeapon(spec, wm);
+        const p = new PickupWeapon(spec, wm, this.groundLeanAt(x, gy));
         this.weapPickups.push(p);
         this.view.addChild(p.view);
       } else {
@@ -1024,177 +1014,6 @@ export class Arena {
     this.walls.push({ x: x + w / 2, y: y + h / 2, width: w, height: h, rotation: 0 });
   }
 
-  /** Add ground + side walls shared by every level. */
-  private addBounds(): void {
-    const W = GAME_WIDTH;
-    this.wall(0, this.floorY, W, GAME_HEIGHT - this.floorY + 20);
-    this.wall(-20, 0, 20, GAME_HEIGHT);
-    this.wall(W, 0, 20, GAME_HEIGHT);
-  }
-
-  /**
-   * Finalize a level from a list of platform rects and spawn points.
-   * Platforms are top-left based `[x, y, w, h]`; spawns are `[x, y]` (on top
-   * of whatever surface). A fully-connected waypoint graph is derived from the
-   * spawn set so the AI can path anywhere.
-   */
-  private finish(
-    platforms: [number, number, number, number][],
-    spawns: [number, number][],
-  ): void {
-    for (const [x, y, w, h] of platforms) this.wall(x, y, w, h);
-
-    this.spawnNodes = spawns.map(([x, y], i) => ({
-      team: 0,
-      x,
-      y,
-      name: "s" + i,
-      taken: false,
-    }));
-    this.humanWP = { x: GAME_WIDTH / 2, y: this.floorY };
-
-    this.wayNodes = this.spawnNodes.map((s, i) => ({
-      name: s.name,
-      x: s.x,
-      y: s.y,
-      connects: this.spawnNodes.filter((_, j) => j !== i).map((o) => o.name),
-      actions: [],
-    }));
-  }
-
-  private buildLevel(level: string): void {
-    switch (level) {
-      case "space":
-        this.buildSpace();
-        break;
-      case "toxic":
-        this.buildToxic();
-        break;
-      case "pit":
-        this.buildPit();
-        break;
-      case "city":
-      default:
-        this.buildCity();
-        break;
-    }
-  }
-
-  // --- City: symmetric skyline with stepped rooftops ---------------------
-  private buildCity(): void {
-    const W = GAME_WIDTH;
-    this.floorY = GAME_HEIGHT - 70;
-    this.addBounds();
-    const f = this.floorY;
-    this.finish(
-      [
-        [40, f - 110, 150, 22], // left low roof
-        [W - 190, f - 110, 150, 22], // right low roof
-        [180, f - 220, 160, 22], // left high roof
-        [W - 340, f - 220, 160, 22], // right high roof
-        [W / 2 - 90, f - 320, 180, 22], // central tower top
-      ],
-      [
-        [110, f],
-        [W - 110, f],
-        [W / 2, f],
-        [115, f - 110],
-        [W - 115, f - 110],
-        [260, f - 220],
-        [W - 260, f - 220],
-        [W / 2, f - 320],
-      ],
-    );
-  }
-
-  // --- Space: tiered station catwalks around a central gap ---------------
-  private buildSpace(): void {
-    const W = GAME_WIDTH;
-    this.floorY = GAME_HEIGHT - 60;
-    this.addBounds();
-    const f = this.floorY;
-    this.finish(
-      [
-        [0, f - 130, 210, 20], // low left catwalk
-        [W - 210, f - 130, 210, 20], // low right catwalk
-        [W / 2 - 130, f - 150, 260, 20], // central mid platform
-        [70, f - 250, 170, 20], // upper left
-        [W - 240, f - 250, 170, 20], // upper right
-        [W / 2 - 80, f - 350, 160, 20], // top command deck
-      ],
-      [
-        [120, f],
-        [W - 120, f],
-        [100, f - 130],
-        [W - 100, f - 130],
-        [W / 2, f - 150],
-        [150, f - 250],
-        [W - 150, f - 250],
-        [W / 2, f - 350],
-      ],
-    );
-  }
-
-  // --- Toxic: dense asymmetric vertical shaft of narrow gantries ---------
-  private buildToxic(): void {
-    const W = GAME_WIDTH;
-    this.floorY = GAME_HEIGHT - 55;
-    this.addBounds();
-    const f = this.floorY;
-    this.finish(
-      [
-        [30, f - 95, 120, 18],
-        [200, f - 160, 130, 18],
-        [W - 330, f - 160, 130, 18],
-        [W - 150, f - 95, 120, 18],
-        [W / 2 - 95, f - 235, 190, 18], // central toxic platform
-        [60, f - 300, 130, 18],
-        [W - 190, f - 300, 130, 18],
-        [W / 2 - 60, f - 385, 120, 18], // top vent
-      ],
-      [
-        [140, f],
-        [W - 140, f],
-        [W / 2, f],
-        [90, f - 95],
-        [W - 90, f - 95],
-        [265, f - 160],
-        [W - 265, f - 160],
-        [W / 2, f - 235],
-        [125, f - 300],
-        [W - 125, f - 300],
-        [W / 2, f - 385],
-      ],
-    );
-  }
-
-  // --- Pit: wide open arena, few low platforms, deep floor --------------
-  private buildPit(): void {
-    const W = GAME_WIDTH;
-    this.floorY = GAME_HEIGHT - 50;
-    this.addBounds();
-    const f = this.floorY;
-    this.finish(
-      [
-        [90, f - 100, 150, 24], // left block
-        [W - 240, f - 100, 150, 24], // right block
-        [W / 2 - 130, f - 175, 260, 24], // big central platform
-        [0, f - 210, 90, 24], // left ledge
-        [W - 90, f - 210, 90, 24], // right ledge
-      ],
-      [
-        [160, f],
-        [W - 160, f],
-        [W / 2, f],
-        [165, f - 100],
-        [W - 165, f - 100],
-        [W / 2, f - 175],
-        [45, f - 210],
-        [W - 45, f - 210],
-      ],
-    );
-  }
-
   private spawnPickups(level: string): void {
     const wm = SD.matchSettings?.weapons ?? 0;
 
@@ -1230,7 +1049,7 @@ export class Arena {
             y: wp.y,
             respawnSecs: wp.respawn,
           };
-          const p = new PickupWeapon(spec, wm);
+          const p = new PickupWeapon(spec, wm, this.groundLeanAt(wp.x, wp.y));
           this.weapPickups.push(p);
           this.view.addChild(p.view);
         });
@@ -1244,133 +1063,12 @@ export class Arena {
           const p = new PickupItem(spec); this.itemPickups.push(p); this.view.addChild(p.view);
         } else {
           const spec: PickupWeaponSpec = { id: `weap_${i}`, type: "random", x: n.x, y: n.y - 14, respawnSecs: 15 };
-          const p = new PickupWeapon(spec, wm); this.weapPickups.push(p); this.view.addChild(p.view);
+          const p = new PickupWeapon(spec, wm, this.groundLeanAt(n.x, n.y - 14)); this.weapPickups.push(p); this.view.addChild(p.view);
         }
       });
       return;
     }
 
-    const f = this.floorY;
-    const W = GAME_WIDTH;
-
-    // Item pickup specs per level: [kind, x, y, respawnSecs]
-    const itemDefs: Record<string, [string, number, number, number][]> = {
-      city: [
-        ["health",    115,  f - 10,  20],
-        ["shield",    W - 115, f - 10, 20],
-        ["ddamage",   W / 2, f - 10, 40],
-        ["invin",     260,  f - 230, 45],
-        ["health",    W - 260, f - 230, 20],
-      ],
-      space: [
-        ["health",    100,  f - 140, 20],
-        ["shield",    W - 100, f - 140, 20],
-        ["ddamage",   W / 2, f - 160, 40],
-        ["invin",     150, f - 260, 45],
-      ],
-      toxic: [
-        ["health",    90,  f - 105, 20],
-        ["shield",    W - 90, f - 105, 20],
-        ["fade",      W / 2, f - 245, 40],
-        ["ddamage",   125, f - 310, 40],
-      ],
-      pit: [
-        ["health",    165,  f - 110, 20],
-        ["shield",    W - 165, f - 110, 20],
-        ["ddamage",   W / 2, f - 185, 40],
-        ["invin",     45, f - 220, 45],
-      ],
-    };
-
-    // Weapon pickup specs per level: [type, x, y, respawnSecs]
-    const weapDefs: Record<string, [string, number, number, number][]> = {
-      city: [
-        ["random", 115, f - 110 - 12, 15],
-        ["random", W - 115, f - 110 - 12, 15],
-        ["random", 260, f - 220 - 12, 15],
-        ["random", W - 260, f - 220 - 12, 15],
-      ],
-      space: [
-        ["random", W / 2, f - 150 - 12, 15],
-        ["random", 150, f - 250 - 12, 15],
-        ["random", W - 150, f - 250 - 12, 15],
-      ],
-      toxic: [
-        ["random", 265, f - 160 - 12, 15],
-        ["random", W - 265, f - 160 - 12, 15],
-        ["random", W / 2, f - 235 - 12, 15],
-      ],
-      pit: [
-        ["random", 165, f - 100 - 12, 15],
-        ["random", W - 165, f - 100 - 12, 15],
-        ["random", W / 2, f - 175 - 12, 15],
-      ],
-    };
-
-    // The Juggernaut crown sits on the highest contested spot of each map, so
-    // holding it is a positional fight rather than a free grab. Campaign
-    // missions run their own scripted rules, so it only spawns in quick match.
-    const jugDefs: Record<string, [number, number]> = {
-      city: [W / 2, f - 330],
-      space: [W / 2, f - 260],
-      toxic: [W / 2, f - 330],
-      pit: [W / 2, f - 275],
-    };
-    const jugSpot = jugDefs[level];
-    if (jugSpot && !SD.matchSettings?.campaign) {
-      const p = new PickupItem({
-        id: "item_jug",
-        kind: "jug",
-        x: jugSpot[0],
-        y: jugSpot[1],
-        respawnSecs: 20,
-      });
-      this.itemPickups.push(p);
-      this.view.addChild(p.view);
-    }
-
-    for (const [kind, x, y, secs] of itemDefs[level] ?? []) {
-      const spec: PickupItemSpec = { id: `item_${kind}_${x}`, kind: kind as any, x, y, respawnSecs: secs };
-      const p = new PickupItem(spec);
-      this.itemPickups.push(p);
-      this.view.addChild(p.view);
-    }
-
-    for (const [type, x, y, secs] of weapDefs[level] ?? []) {
-      const spec: PickupWeaponSpec = { id: `weap_${type}_${x}`, type, x, y, respawnSecs: secs };
-      const p = new PickupWeapon(spec, wm);
-      this.weapPickups.push(p);
-      this.view.addChild(p.view);
-    }
-  }
-
-  private drawGeometry(): void {
-    this.geo.clear();
-    // Skip the bounding walls (floor + side walls — last 3 entries from addBounds).
-    const platforms = this.walls.slice(0, -3);
-    const bounds = this.walls.slice(-3);
-
-    // Floor and side walls: dark, barely visible.
-    for (const w of bounds) {
-      this.geo.rect(w.x - w.width / 2, w.y - w.height / 2, w.width, w.height);
-    }
-    this.geo.fill({ color: 0x1a1f25, alpha: 0.95 });
-
-    // Platforms: visibly solid with a bright top-edge highlight.
-    for (const w of platforms) {
-      const x = w.x - w.width / 2;
-      const y = w.y - w.height / 2;
-      this.geo.rect(x, y, w.width, w.height);
-    }
-    this.geo.fill({ color: 0x3d4e5e, alpha: 1 });
-
-    // Top-edge highlight on every platform (makes them stand out on dark bgs).
-    for (const w of platforms) {
-      const x = w.x - w.width / 2;
-      const y = w.y - w.height / 2;
-      this.geo.moveTo(x, y).lineTo(x + w.width, y);
-    }
-    this.geo.stroke({ color: 0x7a9ab5, width: 2.5, alpha: 0.9 });
   }
 
   /**
@@ -1476,6 +1174,39 @@ export class Arena {
       }
     }
     return best;
+  }
+
+  /**
+   * Ground lean (radians) under a standing prop at `(x, y)` — the angle its
+   * stand and floating icon should tilt to. Mirrors `Unit.updateTilt`: samples
+   * the walkable surface a stride either side and ignores true cliffs.
+   */
+  groundLeanAt(x: number, y: number): number {
+    const span = 26;
+    const band = 34; // reach across a step riser, like the unit slope probe
+    const surface = (wx: number): number | null => {
+      if (this.wallMask) {
+        const s = this.wallMask.surfaceUnder(wx, y, band);
+        if (s !== null) return s;
+        return Math.abs(this.floorY - y) <= band ? this.floorY : null;
+      }
+      let best: number | null = null;
+      for (const w of this.walls) {
+        if (w.rotation) continue;
+        const wl = w.x - w.width / 2;
+        const wr = w.x + w.width / 2;
+        const wt = w.y - w.height / 2;
+        if (wx >= wl && wx <= wr && wt >= y - band && wt <= y + band) {
+          if (best === null || wt < best) best = wt;
+        }
+      }
+      return best;
+    };
+    const ly = surface(x - span);
+    const ry = surface(x + span);
+    if (ly === null || ry === null) return 0;
+    const a = Math.atan2(ry - ly, span * 2);
+    return Math.abs(a) < 0.6 ? a : 0; // ignore true cliffs (~34°+)
   }
 
   getNode(i: number): WayNode {

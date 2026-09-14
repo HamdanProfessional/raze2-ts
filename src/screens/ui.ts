@@ -84,6 +84,235 @@ export function makePanel(
   return g;
 }
 
+/**
+ * Place a baked front-end screen plate (`menu_campaign`, `menu_quickmatch`,
+ * `menu_armory`, `menu_achievements`, `menu_credits`...) on a screen.
+ *
+ * Plates are the authentic SWF screens authored on an 800x600 stage. The plate
+ * is fitted to the live stage (uniform scale, centred) and a content root is
+ * returned at the same transform, so callers add their interactive controls in
+ * the plate's SWF coordinates as if the stage were 800x600.
+ */
+export interface MenuPlate {
+  /** Add controls here using the original SWF coordinates. */
+  root: Container;
+  /** Group holding both the plate sprite and `root`; toggle/destroy this. */
+  layer: Container;
+  /** Plate scale (live px per SWF px). */
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+}
+
+export function addMenuPlate(view: Container, name: string): MenuPlate | null {
+  const meta = UiArt.meta(name);
+  const tex = UiArt.r2(name);
+  if (!meta || !tex) return null;
+  const scale = Math.min(GAME_WIDTH / 800, GAME_HEIGHT / 600);
+  const offsetX = Math.round((GAME_WIDTH - 800 * scale) / 2);
+  const offsetY = Math.round((GAME_HEIGHT - 600 * scale) / 2);
+
+  const layer = new Container();
+  const sp = new Sprite(tex);
+  sp.scale.set(scale / meta.scale);
+  sp.position.set(offsetX, offsetY);
+  layer.addChild(sp);
+
+  const root = new Container();
+  root.scale.set(scale);
+  root.position.set(offsetX, offsetY);
+  layer.addChild(root);
+  view.addChild(layer);
+  return { root, layer, scale, offsetX, offsetY };
+}
+
+/**
+ * Screen title (`txt_title`) point size and field top, in SWF px.
+ *
+ * Measured off `DefineSprite_1164` frame 37: the field is placed at y 25.7 and
+ * scaled 0.7183, and its glyphs are drawn at 0.0271em — 0.0271 * 1024 * 0.7183
+ * = 19.93px with the baseline 19.25px below the field top.
+ *
+ * These go into `headerRoot`, which is **already scaled by `chrome.s`**, so
+ * they are the SWF's own numbers. Scaling them by `s` a second time is what
+ * made every screen title render ~40% oversized.
+ */
+export const TITLE_SIZE = 20;
+export const TITLE_Y = 28;
+
+/**
+ * Edge-anchored screen chrome for the front-end screens.
+ *
+ * The port's stage is dynamic (fills the window, 1136x639 floor), so a
+ * 800x600 plate would sit boxed in the middle. Instead each original screen is
+ * baked as regions — a header strip, a left panel, a right panel — and placed
+ * here: the header stretches across the stage, the left panel pins to the left
+ * edge, the right panel to the right edge, and the background shows through
+ * between them exactly as the source did over the menu backdrop. Interactive
+ * content is added to the returned roots using each crop's SWF-local
+ * coordinates.
+ */
+export interface ScreenChrome {
+  /** Scale (live px per SWF px), capped so 800*scale fits the stage width. */
+  s: number;
+  /** Width the layout is built against — the stage, or `maxW` if it was capped. */
+  stageW: number;
+  stageH: number;
+  /**
+   * Left edge of the layout box in screen px, 0 unless `maxW` capped it.
+   *
+   * Everything the chrome itself builds is already inside a container shifted
+   * by this. A screen that positions its own children against `stageW` — the
+   * bottom-bar buttons, typically — has to add it.
+   */
+  ox: number;
+  /** Height of the header strip in screen px. */
+  headerH: number;
+  leftX: number; leftY: number; leftW: number; leftH: number;
+  midX: number; midY: number; midW: number; midH: number;
+  rightX: number; rightY: number;
+  /** Right column width in SWF units (its root's local space). */
+  rightW: number; rightH: number;
+  /** Top of the bottom bar band (84 SWF px above the stage bottom). */
+  bottomY: number;
+  leftRoot: Container;
+  midRoot: Container;
+  rightRoot: Container;
+  headerRoot: Container;
+}
+
+export function addScreenChrome(
+  view: Container,
+  spec: {
+    headerL?: string;
+    headerR?: string;
+    header?: string;
+    left?: string;
+    mid?: string;
+    right?: string;
+    /**
+     * A right column that stretches to fill the stage instead of hanging off
+     * the right edge: `l`/`r` are the fixed end pieces, `m` a flat 1px-tall
+     * band stretched between them. `from` picks where the column starts —
+     * after the left panel (default) or after the mid column.
+     */
+    rightStretch?: { l: string; m: string; r: string; from?: "left" | "mid" };
+    /**
+     * Cap the layout width at this many SWF px and centre it, instead of
+     * spreading to the window edges.
+     *
+     * Most of these screens are columns of lists and are happy to be pulled
+     * wide — a wider Options is three wider columns. The ones that want this
+     * are the screens whose right column *stretches*: past the authored 800 the
+     * band becomes a long empty bar, and anything pinned to its right end (the
+     * Quick Match difficulty stepper, the player count) drifts hundreds of px
+     * away from the controls it belongs with. Pass 800 to keep the SWF's own
+     * composition and let the backdrop take the slack.
+     */
+    maxW?: number;
+  },
+): ScreenChrome {
+  const s = Math.min(GAME_HEIGHT / 600, GAME_WIDTH / 800);
+  const stageW = spec.maxW ? Math.min(GAME_WIDTH, spec.maxW * s) : GAME_WIDTH;
+  const ox = Math.round((GAME_WIDTH - stageW) / 2);
+  const stageH = GAME_HEIGHT;
+  const headerH = 56 * s;
+  const bottomY = stageH - 84 * s;
+
+  // Everything below lays out in box-local coordinates; the box is what moves.
+  const box = new Container();
+  box.x = ox;
+  view.addChild(box);
+  view = box;
+
+  const addSprite = (name: string | undefined, x: number, y: number): Sprite | null => {
+    if (!name) return null;
+    const meta = UiArt.meta(name);
+    const tex = UiArt.r2(name);
+    if (!meta || !tex) return null;
+    const sp = new Sprite(tex);
+    sp.scale.set(s / meta.scale);
+    sp.position.set(Math.round(x), Math.round(y));
+    view.addChild(sp);
+    return sp;
+  };
+
+  // Header: left piece stretches, optional right piece keeps native scale.
+  if (spec.header) {
+    const meta = UiArt.meta(spec.header);
+    const sp = addSprite(spec.header, 0, 0);
+    if (sp && meta) {
+      sp.width = stageW;
+      sp.height = 56 * s;
+    }
+  } else if (spec.headerL) {
+    const meta = UiArt.meta(spec.headerL);
+    const sp = addSprite(spec.headerL, 0, 0);
+    if (sp && meta) {
+      const rightW = spec.headerR ? (UiArt.meta(spec.headerR)?.w ?? 0) * s : 0;
+      sp.width = stageW - rightW;
+      sp.height = 56 * s;
+    }
+    addSprite(spec.headerR, stageW - (UiArt.meta(spec.headerR ?? "")?.w ?? 0) * s, 0);
+  }
+
+  // Panels.
+  const leftMeta = spec.left ? UiArt.meta(spec.left) : null;
+  const midMeta = spec.mid ? UiArt.meta(spec.mid) : null;
+  const rightMeta = !spec.rightStretch && spec.right ? UiArt.meta(spec.right) : null;
+  if (leftMeta) addSprite(spec.left, 0, headerH);
+  // Mid panel sits just after the left column (the source's 5px gutter).
+  const midX = leftMeta ? leftMeta.w * s + 6 * s : 0;
+  if (midMeta) addSprite(spec.mid, midX, headerH);
+  if (rightMeta) addSprite(spec.right, stageW - rightMeta.w * s, headerH);
+
+  // Stretchable right column: fixed ends, the flat band between them fills.
+  let rightX = rightMeta ? stageW - rightMeta.w * s : stageW;
+  let rightW = rightMeta?.w ?? 0;
+  if (spec.rightStretch) {
+    const { l, m, r } = spec.rightStretch;
+    const lM = UiArt.meta(l);
+    const mM = UiArt.meta(m);
+    const rM = UiArt.meta(r);
+    rightX = spec.rightStretch.from === "mid" ? midX + (midMeta?.w ?? 0) * s
+      : leftMeta ? leftMeta.w * s : 0;
+    rightW = (stageW - rightX) / s;
+    addSprite(l, rightX, headerH);
+    addSprite(r, stageW - (rM?.w ?? 0) * s, headerH);
+    const band = addSprite(m, rightX + (lM?.w ?? 0) * s, headerH);
+    if (band && mM) {
+      band.width = Math.max(1, stageW - (rM?.w ?? 0) * s - rightX - (lM?.w ?? 0) * s);
+      band.height = mM.h * s;
+    }
+  }
+
+  const mkRoot = (x: number, y: number): Container => {
+    const c = new Container();
+    c.scale.set(s);
+    c.position.set(Math.round(x), Math.round(y));
+    view.addChild(c);
+    return c;
+  };
+
+  const leftRoot = mkRoot(0, headerH);
+  const midRoot = mkRoot(midX, headerH);
+  const rightRoot = mkRoot(rightX, headerH);
+  const headerRoot = mkRoot(0, 0);
+
+  return {
+    s, stageW, stageH, ox, headerH,
+    leftX: 0, leftY: headerH,
+    leftW: (leftMeta?.w ?? 0) * s, leftH: (leftMeta?.h ?? 0) * s,
+    midX, midY: headerH,
+    midW: (midMeta?.w ?? 0) * s, midH: (midMeta?.h ?? 0) * s,
+    rightX, rightY: headerH,
+    rightW,
+    rightH: ((UiArt.meta(spec.right ?? spec.rightStretch?.l ?? "")?.h) ?? 0) * s,
+    bottomY,
+    leftRoot, midRoot, rightRoot, headerRoot,
+  };
+}
+
 export interface ButtonOpts {
   width?: number;
   height?: number;

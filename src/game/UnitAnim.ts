@@ -26,7 +26,7 @@
  * uses that pose, and it is not in the baked sheet.
  */
 
-/** The 12 modelled UnitMC labels. `crouch` is the SWF's `duckloop`. */
+/** The 13 modelled UnitMC labels. `crouch` is the SWF's `duckloop`. */
 export type AnimState =
   | "idle"
   | "run"
@@ -39,7 +39,8 @@ export type AnimState =
   | "landrunback"
   | "duck"
   | "crouch"
-  | "getup";
+  | "getup"
+  | "armorlock";
 
 /**
  * What happens when a label reaches its end, from the `addFrameScript`
@@ -75,6 +76,9 @@ const END: Record<AnimState, EndSpec> = {
   duck: { kind: "goto", to: "crouch" },
   crouch: { kind: "loop" },
   getup: { kind: "goto", to: "idle" },
+  // frame230: abilityDone(); goto("idle", true). The lock ends on the tick
+  // `Unit.abilityLock` hits 0, which forces the exit (see Unit.updateSprites).
+  armorlock: { kind: "hold" },
 };
 
 /**
@@ -83,6 +87,9 @@ const END: Record<AnimState, EndSpec> = {
  */
 export function resolveGoto(cur: AnimState, req: AnimState): AnimState | null {
   if (cur === req) return null;
+  // `UnitMC.goto()`: once armorlocked, every unforced request is ignored — the
+  // pose can only be left by the end-script's forced `goto("idle", true)`.
+  if (cur === "armorlock") return null;
   // Play-once poses that the movement state must not cut short.
   if (cur === "jump" && req === "fall") return null;
   if (cur === "tuck" && req === "fall") return null;

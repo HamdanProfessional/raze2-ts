@@ -3,27 +3,46 @@ import type { Body, Joint } from "planck";
 import type { Container } from "pixi.js";
 import { PTM } from "../core/Config";
 import { Quality } from "../state/Quality";
-import { RdContainer, type PartKind, type PartSpec } from "./RdContainer";
+import { RdContainer, type PartSpec } from "./RdContainer";
+import { RagdollArt, HIT_SHRINK, type PartKind } from "../assets/RagdollArt";
+import { RAZE2_SKINS } from "../assets/raze2";
 import type { Phys } from "./Phys";
+
+/** Skin id -> the single costume index every part clip is set to. */
+const SKIN_FRAME = new Map<string, number>(
+  (RAZE2_SKINS as { id: string; frame: number }[]).map((s) => [s.id, Number(s.frame)]),
+);
 
 // A detached head trails blood for this many frames, one drop every few.
 const HEAD_TRAIL_FRAMES = 24;
 const HEAD_TRAIL_INTERVAL = 4;
 
 /**
- * The ragdoll. Ported from RdActor.as.
+ * The death ragdoll. Ported from `PhysActor.as`.
  *
- * Builds a torso plus 13 jointed limbs (head, two upper/lower arms + hands, two
- * upper/lower legs + feet) as planck bodies connected by revolute joints. Every
- * fixture shares filterGroupIndex = collideIndex (-1 for a normal guy) so the
- * parts never collide with each other.
+ * Fourteen bodies — torso, head, and two three-link arms and legs — chained by
+ * revolute joints, all sharing `filter.groupIndex = -1` so they pass through
+ * each other.
  *
- * Coordinate conventions preserved from the original AS3:
- *  - world units are meters; PTM (30) px per meter.
- *  - a body's origin coincides with its joint pivot; the fixture is offset from
- *    there so the limb's mass hangs off the pivot.
- *  - `flip` (±1) mirrors the character; joint angle limits swap+negate when
- *    flipped so a mirrored ragdoll bends correctly.
+ * Three things about the original are easy to get wrong, and the port had all
+ * three wrong:
+ *
+ *  1. **Nothing is authored in this rig.** `createPart` takes no size. It
+ *     instantiates the part clip, `gotoAndStop(skin)`, and derives the fixture
+ *     from the clip's own measured bounds (`clip.width * 0.8 / 60`). So the
+ *     hitbox follows the art, per costume, and sizes cannot be guessed — see
+ *     `ragdollRig.json`, baked from the same clips.
+ *  2. **There is no scale factor.** Coordinates below are raw SWF pixels over
+ *     PTM, exactly as authored. Multiplying them by the unit's `scale` (0.42)
+ *     shrank every corpse to under half size.
+ *  3. **One costume index drives every part.** `skin = unit.MC.curSkin` is
+ *     pushed into torso, head, arms, hands, legs and feet alike; there is no
+ *     per-part costume and no fallback table.
+ *
+ * Coordinates are in SWF pixels relative to the actor origin (`unit.x`,
+ * `unit.y - 50`); `createPart` and `vec` convert to metres. `flip` (±1) mirrors
+ * x, and joint limits swap-and-negate when flipped so a mirrored corpse folds
+ * the right way.
  */
 export class RdActor {
   unit: any;
@@ -43,7 +62,7 @@ export class RdActor {
   part_foot1!: Body;
   part_foot2!: Body;
 
-  /** All 14 bodies (torso + limbs), used for cleanup. */
+  /** All 14 bodies, in `PhysActor.parts` order (also the draw order). */
   allParts: Body[] = [];
   /** The 12 limb bodies (no torso/head), used for death impulses. */
   limbs: Body[] = [];
@@ -52,15 +71,14 @@ export class RdActor {
   headJoint: Joint | null = null;
   /** True once the head has been severed — drives the blood trail. */
   headOff = false;
-  /** Frames since this ragdoll spawned; drives the settle fade. */
+  /** Frames since this ragdoll spawned; drives the four-second vaporise. */
   age = 0;
-  /** Joint created by the most recent createBodyPart() call. */
-  private lastJoint: Joint | null = null;
 
   private rdPhys: Phys;
   private collideIndex: number;
-  private scale: number;
   private flip: number;
+  private skinFrame: number;
+  private ability?: string;
   private x: number;
   private y: number;
 
@@ -69,75 +87,117 @@ export class RdActor {
     this.unit = unit;
     unit.ragActor = this;
 
-    this.x = unit.x / PTM;
-    this.y = (unit.y - 50) / PTM;
-    this.scale = unit.scale;
-    this.flip = unit.animMC.scaleX;
+    this.x = unit.x;
+    this.y = unit.y - 50;
+    this.flip = unit.animMC?.scaleX === -1 ? -1 : 1;
     this.collideIndex = collideIndex;
+    this.skinFrame = SKIN_FRAME.get(String(unit.skinId)) ?? RagdollArt.rig.frames[0];
+    this.ability = unit.ability?.sprite;
 
-    const c = unit.costume;
+    // (x, y, angle, kind, isBox) — call order and arguments from PhysActor.as:80+
+    const body = this.createPart(0, 0, 0, "body", true);
+    const head = this.createPart(0, -15, 0, "head", false);
+    this.headJoint = this.joint(body, head, 0, 0, -0.2, 0.02);
 
-    // torso, then limbs chained off it. Parameters match the AS3 call sites.
-    this.part_body = this.createBody("body", c.body);
-    // (parent, w, h(-1=circle), density, jx, jy, ox, oy, loAng, hiAng, costume, kind)
-    this.part_head = this.createBodyPart(this.part_body, 18, -1, 1, 5, -20, 0, -17, -0.2, 0.25, c.head, "head");
-    this.headJoint = this.lastJoint;
-    this.part_armUpp1 = this.createBodyPart(this.part_body, 8, 30, 1, -3, -13, 0, 20, 0, 0, c.body, "upperArm");
-    this.part_armUpp2 = this.createBodyPart(this.part_body, 8, 30, 1, -3, -13, 0, 20, 0, 0, c.body, "upperArm");
-    this.part_armLow1 = this.createBodyPart(this.part_armUpp1, 7, 20, 1, -2.5, 10, 0, 20, -0.75, 0, c.body, "lowerArm");
-    this.part_armLow2 = this.createBodyPart(this.part_armUpp2, 7, 20, 1, -2.5, 10, 0, 20, -0.75, 0, c.body, "lowerArm");
-    this.part_hand1 = this.createBodyPart(this.part_armLow1, 6, 9, 1, 0, 28, 0, 10, -0.25, 0.25, c.body, "hand");
-    this.part_hand2 = this.createBodyPart(this.part_armLow2, 6, 9, 1.5, 0, 28, 0, 10, -0.25, 0.25, c.body, "hand");
-    this.part_legUpp1 = this.createBodyPart(this.part_body, 13, 37, 1, -2, 15, 0, 20, -0.5, 0.25, c.legs, "upperLeg");
-    this.part_legUpp2 = this.createBodyPart(this.part_body, 13, 37, 1, -2, 15, 0, 20, -0.5, 0.25, c.legs, "upperLeg");
-    this.part_legLow1 = this.createBodyPart(this.part_legUpp1, 12, 37, 1, -1.5, 44, 0, 20, 0, 0.85, c.legs, "lowerLeg");
-    this.part_legLow2 = this.createBodyPart(this.part_legUpp2, 12, 37, 1, -1.5, 44, 0, 20, 0, 0.85, c.legs, "lowerLeg");
-    this.part_foot1 = this.createBodyPart(this.part_legLow1, 20, 10, 1, 0, 72, 8, 2, -0.15, 0.25, c.legs, "foot");
-    this.part_foot2 = this.createBodyPart(this.part_legLow2, 20, 10, 1, 0, 72, 8, 2, -0.15, 0.25, c.legs, "foot");
+    const legUpp1 = this.createPart(-2, 20, 0, "upperLeg", true);
+    this.joint(body, legUpp1, -1, 10, -0.5, 0.2);
+    const legLow1 = this.createPart(-5, 38, 0, "lowerLeg", true);
+    this.joint(legUpp1, legLow1, -3, 26, 0, 0.5);
+    const foot1 = this.createPart(-2, 48, 0, "foot", true);
+    this.joint(legLow1, foot1, -3, 48, -0.1, 0.2);
 
-    unit.ragDoll = this.part_body.getUserData();
+    const legUpp2 = this.createPart(-2, 20, 0, "upperLeg", true);
+    this.joint(body, legUpp2, -1, 10, -0.5, 0.2);
+    const legLow2 = this.createPart(-5, 38, 0, "lowerLeg", true);
+    this.joint(legUpp2, legLow2, -3, 26, 0, 0.5);
+    const foot2 = this.createPart(-2, 48, 0, "foot", true);
+    this.joint(legLow2, foot2, -3, 48, -0.1, 0.2);
 
-    // Ordered back-to-front for correct draw layering (matches AS3 addChild order).
+    // The arms start folded: 0.4pi at the shoulder, 0.5pi at elbow and wrist.
+    // Dropping these left every corpse T-posing out of the gate.
+    const armUpp1 = this.createPart(0, 0, 0.4, "upperArm", true);
+    this.joint(body, armUpp1, -3, -5, 0, 0);
+    const armLow1 = this.createPart(0, 15, 0.5, "lowerArm", true);
+    this.joint(armUpp1, armLow1, -3, 10, -0.8, 0);
+    const hand1 = this.createPart(3, 20, 0.5, "hand", false);
+    this.joint(armLow1, hand1, -2, 18, -0.2, 0.2);
+
+    const armUpp2 = this.createPart(0, 0, 0.4, "upperArm", true);
+    this.joint(body, armUpp2, -3, -5, 0, 0);
+    const armLow2 = this.createPart(0, 15, 0.5, "lowerArm", true);
+    this.joint(armUpp2, armLow2, -3, 10, -0.8, 0);
+    const hand2 = this.createPart(3, 20, 0.5, "hand", false);
+    this.joint(armLow2, hand2, -2, 18, -0.2, 0.2);
+
+    Object.assign(this, {
+      part_body: body, part_head: head,
+      part_armUpp1: armUpp1, part_armLow1: armLow1, part_hand1: hand1,
+      part_armUpp2: armUpp2, part_armLow2: armLow2, part_hand2: hand2,
+      part_legUpp1: legUpp1, part_legLow1: legLow1, part_foot1: foot1,
+      part_legUpp2: legUpp2, part_legLow2: legLow2, part_foot2: foot2,
+    });
+
+    unit.ragDoll = body.getUserData();
+
+    // `PhysActor.parts` push order, which is also the addChild order: the far
+    // arm and far leg go behind the torso, the near arm in front of it.
     this.allParts = [
-      this.part_armLow2, this.part_armUpp2, this.part_hand2, this.part_foot2,
-      this.part_legLow2, this.part_legUpp2, this.part_foot1, this.part_legLow1,
-      this.part_legUpp1, this.part_body, this.part_head, this.part_armLow1,
-      this.part_armUpp1, this.part_hand1,
+      hand2, armLow2, armUpp2,
+      foot2, legLow2, legUpp2,
+      foot1, legLow1, legUpp1,
+      body,
+      head,
+      hand1, armLow1, armUpp1,
     ];
     this.limbs = [
-      this.part_armUpp1, this.part_armUpp2, this.part_armLow1, this.part_armLow2,
-      this.part_hand1, this.part_hand2, this.part_legUpp1, this.part_legUpp2,
-      this.part_legLow1, this.part_legLow2, this.part_foot1, this.part_foot2,
+      armUpp1, armUpp2, armLow1, armLow2, hand1, hand2,
+      legUpp1, legUpp2, legLow1, legLow2, foot1, foot2,
     ];
 
-    // Add limb display objects to the physics layer in the same z-order.
     for (const b of this.allParts) {
       const view = b.getUserData() as RdContainer | null;
       if (view) this.rdPhys.view.addChild(view);
     }
   }
 
-  /** Create the torso body (a plain box centred on the spawn point). */
-  private createBody(kind: PartKind, costume: number): Body {
-    const hw = (20 / 60) * this.scale;
-    const hh = (40 / 60) * this.scale;
+  /**
+   * Create one part at (px, py) SWF px from the actor origin, rotated
+   * `angle * pi`, with the fixture centred on the registration point and sized
+   * from the art. Ported from `PhysActor.createPart`.
+   */
+  private createPart(
+    px: number,
+    py: number,
+    angle: number,
+    kind: PartKind,
+    isBox: boolean,
+  ): Body {
+    const f = this.flip;
+    const wx = this.x + px * f;
+    const wy = this.y + py;
 
-    const view = new RdContainer({
+    const spec: PartSpec = {
       kind,
-      costume,
-      widthPx: 20 * this.scale,
-      heightPx: 40 * this.scale,
-      isCircle: false,
-      offsetXPx: 0,
-      offsetYPx: 0,
-      scale: this.scale,
-      flip: this.flip,
+      skinFrame: this.skinFrame,
+      flip: f,
+      ...(kind === "body" && this.ability ? { ability: this.ability } : {}),
+    };
+    const view = new RdContainer(spec);
+
+    const body = this.rdPhys.world.createDynamicBody({
+      position: new Vec2(wx / PTM, wy / PTM),
+      angle: angle * f * Math.PI,
     });
 
-    const body = this.rdPhys.world.createDynamicBody(new Vec2(this.x, this.y));
+    // clip.width/height * 0.8 / 60 — half-extents, so the shape is 0.8x the art.
+    const [aw, ah] = RagdollArt.artSize(kind, this.skinFrame);
     body.createFixture({
-      shape: new Box(hw, hh),
-      density: 1,
+      shape: isBox
+        ? new Box((aw * HIT_SHRINK) / 60, (ah * HIT_SHRINK) / 60)
+        : new Circle((aw * HIT_SHRINK) / 60),
+      // PhysActor gives the torso 1.5 and everything else 1, so the corpse
+      // falls torso-led instead of being dragged around by its limbs.
+      density: kind === "body" ? 1.5 : 1,
       friction: 0.5,
       restitution: 0.2,
       filterGroupIndex: this.collideIndex,
@@ -147,100 +207,40 @@ export class RdActor {
   }
 
   /**
-   * Create one limb: a box (or circle when h == -1) offset from its pivot,
-   * revolute-jointed to `parent`.
+   * Revolute joint anchored at (ax, ay) SWF px from the actor origin — an
+   * absolute world point, not an offset from either body's centre. Ported from
+   * `PhysActor.createJoint` + `createVec`.
    */
-  private createBodyPart(
-    parent: Body,
-    w: number,
-    h: number,
-    density: number,
-    jx: number,
-    jy: number,
-    ox: number,
-    oy: number,
-    loAng: number,
-    hiAng: number,
-    costume: number,
-    kind: PartKind,
-  ): Body {
-    const jxm = jx / 30;
-    const jym = jy / 30;
-    const s = this.scale;
+  private joint(
+    a: Body,
+    b: Body,
+    ax: number,
+    ay: number,
+    lo: number,
+    hi: number,
+  ): Joint {
     const f = this.flip;
-
-    // Body origin sits at the pivot: torso base + (jx,jy) scaled/flipped.
-    const posX = this.x + jxm * s * f;
-    const posY = this.y + jym * s;
-
-    const isCircle = h === -1;
-    const offXPx = (ox / 2) * s * f; // shape centre offset in px
-    const offYPx = (oy / 2) * s;
-
-    const spec: PartSpec = {
-      kind,
-      costume,
-      widthPx: w * s,
-      heightPx: (isCircle ? w : h) * s,
-      isCircle,
-      offsetXPx: offXPx,
-      offsetYPx: offYPx,
-      scale: s,
-      flip: f,
-    };
-    const view = new RdContainer(spec);
-
-    const body = this.rdPhys.world.createDynamicBody(new Vec2(posX, posY));
-    if (isCircle) {
-      body.createFixture({
-        shape: new Circle(new Vec2((ox / 60) * s * f, (oy / 60) * s), (w / 60) * s),
-        density,
-        friction: 0.5,
-        restitution: 0.2,
-        filterGroupIndex: this.collideIndex,
-      });
-    } else {
-      body.createFixture({
-        shape: new Box(
-          (w / 60) * s,
-          (h / 60) * s,
-          new Vec2((ox / 60) * s * f, (oy / 60) * s),
-          0,
-        ),
-        density,
-        friction: 0.5,
-        restitution: 0.2,
-        filterGroupIndex: this.collideIndex,
-      });
+    if (f === -1) {
+      const swap = lo;
+      lo = hi * f;
+      hi = swap * f;
     }
-    body.setUserData(view);
-
-    // Revolute joint at the shared pivot (torso centre + (jx,jy)).
-    const torsoCenter = this.part_body.getWorldCenter();
-    const anchor = new Vec2(
-      torsoCenter.x + jxm * s * f,
-      torsoCenter.y + jym * s,
-    );
-    const jointOpts: any = {
-      enableMotor: true,
-      motorSpeed: 0,
-      maxMotorTorque: 0.02,
-    };
-    if (loAng !== 0 || hiAng !== 0) {
-      if (f !== -1) {
-        jointOpts.lowerAngle = loAng * Math.PI;
-        jointOpts.upperAngle = hiAng * Math.PI;
-      } else {
-        jointOpts.lowerAngle = hiAng * Math.PI * f;
-        jointOpts.upperAngle = loAng * Math.PI * f;
-      }
-      jointOpts.enableLimit = true;
-    }
-    this.lastJoint = this.rdPhys.world.createJoint(
-      new RevoluteJoint(jointOpts, parent, body, anchor),
-    );
-
-    return body;
+    const anchor = new Vec2((this.x + ax * f) / PTM, (this.y + ay) / PTM);
+    return this.rdPhys.world.createJoint(
+      new RevoluteJoint(
+        {
+          lowerAngle: lo * Math.PI,
+          upperAngle: hi * Math.PI,
+          enableLimit: lo !== 0 || hi !== 0,
+          maxMotorTorque: 0.02,
+          motorSpeed: 0,
+          enableMotor: true,
+        },
+        a,
+        b,
+        anchor,
+      ),
+    )!;
   }
 
   /**
@@ -259,16 +259,7 @@ export class RdActor {
     this.headOff = true;
   }
 
-  /**
-   * Per-frame corpse upkeep: the blood trail off a severed head. Driven by
-   * Phys.enterFrame.
-   *
-   * The port used to fade a corpse to 45% once it stopped tumbling, so a long
-   * match didn't accumulate a field of equally-bright bodies. That was a port
-   * invention covering for corpses that outstayed their welcome; now that they
-   * evaporate on the original's four-second clock there is nothing to cover
-   * for, and `PhysActor` holds full opacity for its whole life.
-   */
+  /** Per-frame corpse upkeep: the blood trail off a severed head. */
   advance(): void {
     this.age++;
     if (this.headOff) this.trailBlood();

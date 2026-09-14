@@ -8,7 +8,7 @@ import { computeKillBonuses, creditMod, tallyBonuses, type KillCause } from "./K
 import { SPREE_ENDER_AT } from "./Score";
 import { SkinArt } from "../assets/SkinArt";
 import { Status } from "./Status";
-import { Guns } from "./Guns";
+import { Guns, bloodName } from "./Guns";
 import { getAbility } from "./Abilities";
 import { ArmArt } from "../assets/ArmArt";
 import { ArmAnim } from "../assets/ArmAnim";
@@ -39,6 +39,9 @@ function legacyAnimState(state: AnimState): LegacyAnimState {
     case "land": return "idle";
     case "duck":
     case "getup": return "crouch";
+    // The Static Field lock pose exists only on the Raze 2 sheets; the older
+    // Raze 1 art sets approximate it with the crouch.
+    case "armorlock": return "crouch";
     default: return state as LegacyAnimState;
   }
 }
@@ -1073,6 +1076,16 @@ export class Unit {
     // advance the playhead. The SWF timelines are authored at 30fps and the
     // logic step is 30fps, so this is one frame per tick — it used to advance
     // every other tick, playing every animation at half speed.
+    //
+    // Static Field is the one force-driven transition: `Unit.as:1206` calls
+    // `MC.goto("armorlock", true)` on activation (the unforced table refuses to
+    // leave it), and the label's frame-230 script calls `abilityDone()` then
+    // forces `idle` — here the lock running out is that script.
+    if (this.abilityLock > 0) {
+      if (this.anim.state !== "armorlock") this.anim.goto("armorlock", true);
+    } else if (this.anim.state === "armorlock") {
+      this.anim.goto("idle", true);
+    }
     this.anim.goto(this.computeAnimState());
     const state = this.anim.state;
 
@@ -2525,13 +2538,12 @@ export class Unit {
     // for a flesh wound; this is the burst that marks the body going down, and
     // it fires whatever killed them (including splash, which has no impact fx
     // on the victim at all).
-    // "lol cats" special mode (doc 11 §2.1): blood becomes a rainbow spray.
-    const bloodColor = SD.matchSettings.lolCats
-      ? [0xff5a5a, 0xffcc33, 0x66ff66, 0x66ccff, 0xcc66ff][Math.floor(Math.random() * 5)]
-      : undefined;
+    // "lol cats" special mode (doc 11 §2.1): blood becomes a rainbow spray —
+    // `bloodRainbow` is its own clip in the atlas, not the ordinary spray under
+    // a random tint, which is what the port had to fake before the art existed.
     this.game.addEffect(
       this.x, this.y - 45 * this.bodyScale(),
-      info.headShot ? "bloodBig" : "blood", bloodColor,
+      SD.matchSettings.lolCats ? "bloodRainbow" : bloodName(this),
     );
 
     // The crown drops with its holder, freeing the pickup to re-arm.
@@ -2860,7 +2872,7 @@ export class Unit {
     this.status.dead = true;
     this.view.visible = false;
     this._netFiring = false;
-    this.game.addEffect(this.x, this.y - 45 * this.bodyScale(), "blood");
+    this.game.addEffect(this.x, this.y - 45 * this.bodyScale(), bloodName(this));
     if (this.isJug) this.removeJug();
     this.game.rdPhys.makeGuy(this, { x: this.x, y: this.y - 45 * this.bodyScale() });
     this.game.rdPhys.makeGun(this);

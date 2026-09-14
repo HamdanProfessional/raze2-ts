@@ -97,20 +97,22 @@ SD.init();
 
 // --- campaign unlock states ------------------------------------------------
 {
-  // Restyled to the authentic Raze 2 list layout (doc 13 §2): a 15-row mission
-  // list per species with an unlocked / current / locked read on each row.
+  // The authentic two-screen flow (doc 13 §2): a Campaign Select plate, then a
+  // 15-row mission list per species with unlocked / current / locked per row.
   SD.curStage = 5;
   const s = make(CampaignScreen);
   const rows: any[] = (s as any).rows;
   if (rows.length !== 15) throw new Error(`expected 15 mission rows, got ${rows.length}`);
   const row = (num: number) => rows.find((r) => r.num === num);
-  if (row(4).numText.text !== "4.") throw new Error("completed/unlocked mission should show its number");
-  if (row(4).lock.visible) throw new Error("unlocked mission should not show a padlock");
+  if (!row(4).numText.text.startsWith("4.")) {
+    throw new Error(`completed mission should show its number: ${row(4).numText.text}`);
+  }
   if ((s as any).selected !== 5) throw new Error("current stage should be selected by default");
-  if (!row(6).lock.visible) throw new Error("locked mission should show a padlock");
-  if (!row(6).titleText.text.includes("Beat level 5 to unlock")) {
+  if (row(6).titleText.text !== "Beat level 5 to unlock") {
     throw new Error(`locked row copy wrong: ${row(6).titleText.text}`);
   }
+  if (row(6).state !== 4) throw new Error("locked row should wear the padlock state");
+  if (row(5).state !== 3) throw new Error("current row should wear the selected state");
   for (let i = 0; i < 10; i++) s.enterFrame(1);
   s.destructor();
 
@@ -118,9 +120,31 @@ SD.init();
   SD.curStage = 7;
   const s2 = make(CampaignScreen);
   const rows2: any[] = (s2 as any).rows;
-  if (rows2.find((r) => r.num === 7).lock.visible) throw new Error("stage 7 should be unlocked at curStage 7");
-  if (!rows2.find((r) => r.num === 8).lock.visible) throw new Error("stage 8 should still be locked");
+  if (!rows2.find((r) => r.num === 7).numText.text.startsWith("7.")) {
+    throw new Error("stage 7 should be unlocked at curStage 7");
+  }
+  if (rows2.find((r) => r.num === 8).titleText.text !== "Beat level 7 to unlock") {
+    throw new Error("stage 8 should still be locked");
+  }
   s2.destructor();
+
+  // Alien campaign: rows number 1..15 (local), and the "Beat level N" copy is
+  // local too — Menu.as writes the row's index, not the absolute stage.
+  SD.curStage = 20;
+  const s3 = make(CampaignScreen);
+  (s3 as any).enterCampaign(true);
+  const rows3: any[] = (s3 as any).rows;
+  if ((s3 as any).selected !== 20) {
+    throw new Error(`alien entry should select the current stage, got ${(s3 as any).selected}`);
+  }
+  const row3 = (num: number) => rows3.find((r) => r.num === num);
+  if (!row3(16).numText.text.startsWith("1.")) {
+    throw new Error(`alien mission 1 should be numbered locally: ${row3(16).numText.text}`);
+  }
+  if (row3(21).titleText.text !== "Beat level 5 to unlock") {
+    throw new Error(`alien locked row copy wrong: ${row3(21).titleText.text}`);
+  }
+  s3.destructor();
   console.log("CampaignScreen: 15-row list, locked/current/unlocked states ok");
 }
 
@@ -200,26 +224,17 @@ SD.init();
   console.log("StatsScreen: all 10 achievements list (locked included), scroll clamps, medals append");
 }
 
-// --- about / info screen ---------------------------------------------------
+// --- about / credits screen -------------------------------------------------
 {
+  // Rebuilt on the original Credits plate: a static screen with Esc/Back out.
   const s = make(InfoScreen);
-  const max = (s as any).maxScroll;
-  if (!(max > 0)) throw new Error("info content should overflow and be scrollable");
-  key("End");
-  if ((s as any).scroll !== max) throw new Error("[End] did not jump to the bottom");
-  key("Home");
-  if ((s as any).scroll !== 0) throw new Error("[Home] did not jump to the top");
-  key("ArrowDown");
-  if ((s as any).scroll <= 0) throw new Error("[Down] did not scroll");
-  key("ArrowUp");
-  if ((s as any).scroll !== 0) throw new Error("[Up] did not scroll back / clamp at 0");
   s.enterFrame(1);
   key("Escape");
   if (requested !== (MenuScreen as unknown as ScreenClass)) {
-    throw new Error("[Esc] did not close the info screen");
+    throw new Error("[Esc] did not close the credits screen");
   }
   s.destructor();
-  console.log("InfoScreen: scrolls, clamps and closes");
+  console.log("InfoScreen: credits plate builds and closes");
 }
 
 if ((listeners["keydown"] ?? []).length !== 0) {

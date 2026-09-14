@@ -245,10 +245,100 @@ Port files: `src/game/Unit.ts`, `src/assets/raze2/skins.json`, `src/assets/SkinA
 
 **Wrong / incomplete:**
 - **Rig architecture is fundamentally different from the SWF.** The port does not implement a live per-part rig (13 independently-skinned clips + `headhold`/`arm1hold` welding). Instead it uses **pre-baked composite sprite sheets** per skin per state (`skinAnim.json`: body+head+legs baked into one texture per frame; only the aim arm+gun stay as a live overlay welded to a baked `shoulder` track). This is a deliberate, documented simplification (see `SkinArt.ts:6-31` comment) driven by FFDec's inability to bake an AS3-`gotoAndStop`-selected skin automatically — but it means per-part skin swapping, the `headhold`/`arm1hold` two-tier weld, and independent leg/foot clips do not exist in the port; they're flattened into raster frames.
-- **Missing animation states**: `landrun`, `land`, `landrunback`, `duck` (distinct 3-frame lead-in), `getup`, and `armorlock` (ability-freeze pose) have no equivalent in `skinAnim.json`'s 6-state list. `tuck` has no dedicated bake either — `Unit.ts:566-567,669-671` explicitly falls back to the `jump` art for `tuck`, so the double-jump flip currently reuses the jump pose rather than the SWF's distinct 28-frame tuck/spin animation.
-- **No landing-transition animations**: the SWF's `land`/`landrun`/`landrunback` (played once on touchdown before returning to `idle`/`run`/`runback`) are absent; the port likely snaps directly between `fall` and `idle`/`run`/`runback` with no landing frame.
-- **No duck vs. duckloop distinction**: the SWF has a 3-frame `duck` lead-in that free-falls into a 16-frame looping `duckloop`, plus a 4-frame `getup` played once when leaving crouch. The port's single `crouch` state (`Unit.ts:572`) likely collapses this into one loop with no lead-in/lead-out.
-- **No ability/`armorlock` freeze pose or the `goto()` guard table**: the SWF's extensive "ignore this transition" rules in `UnitMC.goto()` (§3, e.g. `armorlock` blocking all other requests, `jump`→`fall` ignored, `duck`/`duckloop`→`idle` redirected to `getup`) do not appear to have a ported equivalent; the port's `moveState()`-style function (`Unit.ts:562-580`) picks a state fresh each frame from current physics flags rather than reproducing the SWF's stateful transition-guard machine, so some of the SWF's "commit to an animation until it naturally finishes" behavior (e.g. `land` can't be cut short by input) may not be reproduced.
-- **`body.ability` skin-frame** (equipped-ability icon shown on the torso, independent of the character skin) has no obviously named counterpart found in the port files reviewed — verify separately if the ability icon overlay is a planned/existing feature elsewhere in the codebase.
-- **"lol cats" head override** is a very low-priority easter egg; not expected to be ported, noting only for completeness.
+- **Animation states — now all 13 (updated 2026-09-14).** `landrun`, `land`, `landrunback`, `duck`, `getup` and `armorlock` are baked in `skinAnim.json` (230 cells across the packed grid; the 2x sheet is 3744×3660). `tuck` has its own 28-frame bake and the double-jump flip plays it. The old "6-state list / tuck falls back to jump" notes are stale.
+- **Landing transitions — done.** `UnitAnim`'s guard table holds `land`/`landrun`/`landrunback`/`getup`/`armorlock` against the per-tick movement request, so the one-shot poses actually play out (see `test/animcheck.ts`).
+- **Duck vs. duckloop — done.** The 3-frame `duck` runs into the 16-frame `crouch` (duckloop) and the exit is rewritten to `getup`, exactly as `UnitMC.goto()` does.
+- **`armorlock` freeze pose — baked and wired (2026-09-14).** The Static Field activation forces `anim.goto("armorlock", true)` (`Unit.updateSprites`), the guard table blocks every unforced request while locked, and the lock running out at `abilityLock == 0` plays the frame-230 script's forced `idle`. Arms keep the live aim overlay (the source's `arm1`/`arm2` armorlock sub-animations are not separately baked).
+- **`body.ability` skin-frame** (equipped-ability icon shown on the torso, independent of the character skin) is the port's back-slot layer (`AbilityArt` + `SkinAnim.ability(state, frame)` attach tracks) — the old "verify separately" note is satisfied.
+- **"lol cats" head override** is the port's `specialMode` blood/head cosmetic path; low-priority, noting only for completeness.
 - Exact reload-dip (`rotReload`, lerp at `0.2`/frame, triggered when `gun.reloading && rotArm<30`) and the precise mirrored-angle algebra in §2.2 (`rotArm = -rotArm+180` under flip, then `fixRotation(rotArm-rotation) + (flip?MC.rotation:-MC.rotation)`) should be diffed line-by-line against `Unit.ts`'s aiming code if exact-feel parity is required — the port's comments suggest a broadly equivalent but not necessarily bit-identical formula.
+
+---
+
+## 5. The death ragdoll is the same rig, cut loose
+
+`PhysActor.as` does not use a separate corpse costume system. It rebuilds the
+character from the **same eight `Phys*` clips** the live unit is assembled from
+and sets them all to the **same single index** the live unit uses:
+
+```as3
+skin = unit.MC.curSkin;
+...
+var _loc6_:b2Body = createPart(0, 0, 0, PhysBody, true);   // clip.gotoAndStop(skin)
+```
+
+| clip | cid | shape |
+|---|---|---|
+| `PhysBody` | 279 | box, density **1.5** |
+| `PhysHead` | 313 | circle |
+| `PhysUpperArm` / `PhysLowerArm` | 132 / 102 | box |
+| `PhysHand` | 342 | circle |
+| `PhysUpperLeg` / `PhysLowerLeg` | 226 / 196 | box |
+| `PhysFoot` | 166 | box |
+
+### 5.1 Nothing in the rig is authored
+
+`createPart` takes **no size**. It instantiates the clip, frames it, and derives
+the fixture from the clip's own measured bounds:
+
+```as3
+boxShape.SetAsBox(_loc6_.width * 0.8 / 60, _loc6_.height * 0.8 / 60);
+circleShape = new b2CircleShape(_loc6_.width * 0.8 / 60);
+```
+
+So every hitbox is **0.8x the art, per costume**, and the numbers cannot be
+guessed — they have to come out of the SWF. `tools/ragdoll/build_ragdoll.py`
+bakes them into `src/assets/raze2/ragdollRig.json` alongside the art.
+
+### 5.2 There is no scale factor
+
+Part positions are raw SWF pixels over PTM (`unit.x`, `unit.y - 50` as the
+origin), and `createPart` never multiplies by anything. The assembled figure is
+~113px — the same order as the live character's 120px cell in `skinAnim.json`.
+
+### 5.3 Placement, in full
+
+Positions are px from the actor origin; joint anchors are absolute world points
+(`createVec`), **not** offsets from either body's centre. Angles are fractions
+of pi and are multiplied by `flip`.
+
+| part | pos | angle | joint anchor | limits |
+|---|---|---|---|---|
+| body | 0, 0 | 0 | — | — |
+| head | 0, −15 | 0 | 0, 0 | −0.2 … 0.02 |
+| upperLeg | −2, 20 | 0 | −1, 10 | −0.5 … 0.2 |
+| lowerLeg | −5, 38 | 0 | −3, 26 | 0 … 0.5 |
+| foot | −2, 48 | 0 | −3, 48 | −0.1 … 0.2 |
+| upperArm | 0, 0 | **0.4** | −3, −5 | 0 … 0 |
+| lowerArm | 0, 15 | **0.5** | −3, 10 | −0.8 … 0 |
+| hand | 3, 20 | **0.5** | −2, 18 | −0.2 … 0.2 |
+
+The three non-zero **initial angles** matter: without them every corpse spawns
+T-posed. Under `flip == -1` the limits swap and negate (`createJoint`).
+
+Draw order is `parts` push order — far arm, far leg, near leg, **body**, head,
+near arm — so the torso sits between the two sides rather than on top of both.
+
+### 5.4 What the port had wrong
+
+Worth recording because each failure looked like a different bug:
+
+- Corpses were built from `public/assets/parts/` — **Raze 1** limb art, capped
+  at 83–101 frames, with `SsBody`-style names that appear nowhere in this SWF.
+  That is the "wrong character" symptom.
+- Every dimension was multiplied by `UNIT_SCALE` (**0.42**), which the original
+  never applies. That is the "too small" symptom.
+- Sizes were invented: the upper arm was authored `8x30` (a tall vertical) when
+  the real clip is `24x15` — wider than it is tall. This one survives a scale
+  fix and still looks wrong.
+- Per-part costumes (`costume.body` / `.head` / `.legs`) with a fallback table,
+  where the original pushes one index into all eight clips.
+- Anchors were hand-tuned fractions ("tune if a limb looks offset") instead of
+  the clip registration point; `upperLeg` was `0.5, 0.1` against a true
+  `0.51, 0.47`, so limbs swung around a point half a limb away from the joint.
+- Initial angles and the torso's 1.5 density were dropped; the shape offsets the
+  port applied (`ox`/`oy`) do not exist in the original at all — the fixture is
+  centred on the registration point.
+- The backpack (`PhysBody.ability`, cid 249) was not carried onto the corpse.
+  FFDec bakes that overlay at frame 1, so the baker strips it and the runtime
+  re-attaches it at the recorded offset `(-11.6, -0.1)`.

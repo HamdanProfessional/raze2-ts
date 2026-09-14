@@ -359,6 +359,17 @@ named effects, not one continuously-scaled clip.
 
 ## Port status
 
+> **Corrected 2026-09-14 — the bullets below describe the pre-rebuild tracer and are
+> stale.** `GameScreen.drawTracer` now reproduces the original's two looks: `basic`
+> tracers are the randomly-dashed single-frame flash (`UT.irand` start offset +
+> gap loop, `GameScreen.ts` "Bullet_Line_Basic" branch), two-pass glow + core, with
+> per-weapon `tracerColor`/`tracerColor2`/widths read from `params[]` in
+> `weapons.ts`; `effect` style adds the railgun's chasing spark; `beam` keeps the
+> thick translucent + thin opaque passes. Persistence is per-style (single-frame
+> flash vs sniper fade). The "half-missing" gap, per-weapon colour table and
+> chase-particle items are closed; `photon_shot` remains the one deliberately
+> unstrippable atlas entry (§11.3).
+
 The port's tracer/impact system lives in `src/game/Fx.ts` (effect factory +
 particle/graphics builders) and `src/game/GameScreen.ts`
 (`addTracer`/`drawTracer`, `:751-823`), driven from `src/game/Guns.ts`.
@@ -427,3 +438,89 @@ particle/graphics builders) and `src/game/GameScreen.ts`
   §8): the port's beam tracer fades in place; nothing marches a secondary
   particle from muzzle to impact after the beam flash, which is a
   distinctive part of the railgun's original look.
+
+---
+
+## 11. The effect system is data, and the data was already here
+
+Everything above describes a port that *draws* effects. It no longer does.
+`tools/fx/bake_bh.py --all` extracts all 58 entries of the `BH` atlas, and
+`Fx.createEffect` now resolves the baked clip first, falling back to the
+hand-drawn library only for names the SWF genuinely has no art for.
+
+### 11.1 What the original actually does
+
+`Effect.as` is the whole effect system and it is 62 lines:
+
+```as3
+stats    = BH.getBitAniStats(name + 0, sub);
+rotation = UT.irand(0, stats.rotAmt - 1);   // once, at spawn
+game.bitscreen.paint(x, y, true, name, sub, frame);
+if (frame > stats.frames) remove = true;
+```
+
+There are exactly three places a weapon names one (`Bullet.as`):
+
+| Field | Fired at | Line |
+|---|---|---|
+| `stats.effShoot` | the muzzle, as the round leaves | 141 |
+| `stats.effHit` | the impact — **wall, unit and corpse alike** | 233 / 327 / 356 |
+| `stats.params[0]` | the round itself, respawned every collision substep | `Bullet_Proj_Basic.as:39` |
+
+Two consequences the port had wrong:
+
+- **A unit hit draws blood *and* `effHit`.** They are thirty lines apart with
+  the damage call between them. The port picked one or the other, so a hit
+  either bled or flashed — and a gun whose `effHit` is its signature (the
+  chaingun's `chain_hit`, the alien sniper's `plasma_explode`) lost it the
+  moment it hit a person.
+- **A `Bullet_Proj_*` round has no body art.** What you see flying is
+  `params[0]` respawned along the path. A grenade's tumble and a rocket's
+  exhaust are the same mechanism; the flamethrower (`Bullet_Proj_Frames`) is
+  the variant that holds one clip and steps it instead of respawning.
+
+### 11.2 What the port was substituting
+
+`weapons.ts effectsFor()` guessed names from broad behaviour — every splash
+projectile got `"rocketExplode"`, every hitscan `"pistol"` — because the port
+had no art and so invented names for what it drew. The catalog had carried the
+real names the whole time. The guessing lost distinctions no behaviour flag can
+recover: a rocket and a grenade both blast `gas_big`, but a sniper is
+`spark_big` and an alien sniper `plasma_explode`, and those two differ only by a
+splash bit.
+
+Coverage now: of the 45 distinct effect names the game can request, 40 play SWF
+art. The five that do not:
+
+| Name | Why |
+|---|---|
+| `crit`, `getDdamage`, `getFade`, `getInvin` | the original draws **nothing** here; these are the port's own readability cues and stay hand-drawn |
+| `photon_shot` | see 11.3 |
+
+### 11.3 One entry the atlas will not give up
+
+`photon_shot` (the Blaster's round, character 1760) is the only BH entry that is
+a bare `DefineShape` rather than a `DefineSprite`, so FFDec exports it to
+`shapes/1760.svg` with no frame directory — which is why it looked like a
+missing export until `frame_svgs()` learned to check there.
+
+It still cannot be shipped. Every other `*_shot` is a sprite placed with a scale
+and a glow and bakes to a 4–26px cell centred on its origin (`lx ≈ -w/2`). This
+one is placed at identity, and the `+12.85, +13.4` its path coordinates carry is
+the same offset the sprite entries express in their placement matrix's
+*translate* — which the sheet deliberately drops, since the origin is where
+`createEffect` was called. The two disagree about whose job that offset is, and
+it bakes as a 1×1 dot hanging 12px down-right of the round. It is in
+`bake_bh.py`'s `SKIP` with that reasoning; the Blaster keeps its drawn bolt.
+
+### 11.4 Why the trail has its own budget
+
+`GameScreen.pushFx` retires the *oldest* effect at `Quality.maxFx` (40 on High),
+which is right for impacts — the freshest hit is the one worth seeing. A rocket
+emits continuously, so on the shared pool one shot would sweep every spark,
+splash and blood spray off the screen within a few frames. `addTrailEffect` uses
+a separate pool where eviction only ever costs the tail of a plume.
+
+This is also why the port steps one `BhBody` clip rather than respawning
+`params[0]` per substep as the SWF does: the original blits into a single
+bitmap and pays nothing per effect, where the port pays a sprite each.

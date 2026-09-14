@@ -43,13 +43,24 @@ import type { GameScreen } from "./GameScreen";
  * (ego-mode) ceiling and never producing a frozen diff==0 "dummy" in normal play.
  */
 
+/** The authentic `MatchSettings.botnames` list (MatchSettings.as:143-149),
+ * flattened in source order. `"Mr.Mau5"` is duplicated in the source exactly
+ * as written. A bot rerolls until it draws a name no live bot already has,
+ * matching the `while(!_loc4_)` loop at MatchSettings.as:249-259. */
 const AI_NAMES = [
-  "skittles", "chz", "Mike", "SlapHappy", "xRagex", "UNKNOWN", "Prime", "epic",
-  "erix", "OwnU", "Jojo", "Hitman", "Shottie", "twK", "Grey_Area", "Dragon",
-  "n00b", "D1g1t4l", "Jumpa", "Pinky", "Boo", "SunRunner", "Hot_Feet", "Sn1p3r",
-  "Drake",
+  "AddisonR", "Juice-Tin",
+  "ArmorGames", "MaestroRage", "Slevanator", "Dabor", "WaterFlame", "zircon",
+  "T-Free", "NemesisTheory", "Jon Beam",
+  "Aethos", "Xelu",
+  "__M@yK__", "Toxic Hazmat", "Lt.Jeffery", "Tr0llTehZ0rz!", "XxTalonxX",
+  "Dark_potato57", "DaMhillz", "XxBlackWolfxX", "Tigermund3", "xX-Gamer-Xx",
+  "maxwell118", "ToxiC KilleR", "Mr.Mau5", "Mr.Mau5", "NEMISIS", "Dj Sonic56",
+  "ShAdOw", "Noobinator", "El Ducko", "Tr00p3r", "Lt. Boehlke", "DB2016",
+  "Darknight000", "EvilSteel", "Reignscythe", "Da Machinima", "Spartan-525",
+  "W1nn3r", "Mr. Platypus", "GameBuilder15",
+  "_Maximum_", "Johnny87", "Yo Mamma", "XxkillaxX", "SonicX", "Scorpio",
+  "McBain", "Krum", "PROTECT ME", "Mordekaiser", "Ezreal", "Garen", "Bieber",
 ];
-const AI_TAGS = ["", "", "", "", "(DA)", "[KoS]", "[NBK]", "ks.", "[HoG]", "via."];
 
 /** Local copies of Unit.ts's generic chatter lines, used only to recognise
  * (and replace with a personality line) calls the base class makes to
@@ -142,8 +153,12 @@ export class AI extends Unit {
       this._name = extra.name ?? "Enemy";
     } else {
       this.diffMod = (SD.matchSettings.diff ?? 1) + (Math.random() * 0.6 - 0.3);
-      const base = AI_NAMES[Math.floor(Math.random() * AI_NAMES.length)];
-      this._name = AI_TAGS[Math.floor(Math.random() * AI_TAGS.length)] + base;
+      const taken = new Set((game.units ?? []).map((u) => u._name));
+      let name = AI_NAMES[Math.floor(Math.random() * AI_NAMES.length)];
+      while (taken.has(name)) {
+        name = AI_NAMES[Math.floor(Math.random() * AI_NAMES.length)];
+      }
+      this._name = name;
     }
     // Ego mode lifts the usual skill ceiling so the top difficulty actually
     // reads as a step above Hard rather than clamping back down to it.

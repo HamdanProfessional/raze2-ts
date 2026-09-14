@@ -16,6 +16,13 @@
 export const C_HEADER = 0xffffff;
 /** Button label text ("txt_word", BlairMdITC). White, drawn at {@link A_LABEL}. */
 export const C_LABEL = 0xffffff;
+/**
+ * Button label over the inverted (white) bar — the `on` frame of `MenuButton_34`.
+ * Near-black rather than pure black so it sits with the bar's soft gradient
+ * instead of punching a hole in it. Hover does NOT use this: `btn_menu_over` is
+ * still a black bar, so its label stays {@link C_LABEL}.
+ */
+export const C_LABEL_ON = 0x141414;
 /** Body / description copy (Calibri fields). White, drawn at {@link A_BODY}. */
 export const C_BODY = 0xffffff;
 /** Value / numeric read-out fields (QTypeSquare). White @ {@link A_VALUE}. */

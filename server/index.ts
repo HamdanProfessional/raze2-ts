@@ -37,6 +37,12 @@ import {
 } from "../src/net/protocol.ts";
 
 const PORT = Number(process.env.PORT) || DEFAULT_PORT;
+/**
+ * Interface to bind. Defaults to every interface so a LAN/dev host is reachable
+ * from other machines; the deployment sets 127.0.0.1 because nginx fronts it and
+ * the port should not be exposed directly.
+ */
+const HOST = process.env.HOST || "0.0.0.0";
 
 // --------------------------------------------------------------------------
 // In-memory model
@@ -361,7 +367,9 @@ function handle(c: Client, msg: ClientMsg): void {
 
 const http = createServer((req, res) => {
   // Tiny health endpoint so a host can check the process is up in a browser.
-  if (req.url === "/health") {
+  // Matched by suffix: behind a path-mounted proxy (nginx `/raze-ws`) the
+  // request arrives as `/raze-ws/health`, with the mount point still attached.
+  if ((req.url || "").replace(/\?.*$/, "").endsWith("/health")) {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ ok: true, rooms: rooms.size, clients: clients.size }));
     return;
@@ -426,7 +434,7 @@ const heartbeat = setInterval(() => {
 }, 15000);
 wss.on("close", () => clearInterval(heartbeat));
 
-http.listen(PORT, () => {
-  console.log(`[raze] multiplayer lobby server listening on ws://0.0.0.0:${PORT}`);
+http.listen(PORT, HOST, () => {
+  console.log(`[raze] multiplayer lobby server listening on ws://${HOST}:${PORT}`);
   console.log(`[raze] health check: http://localhost:${PORT}/health`);
 });

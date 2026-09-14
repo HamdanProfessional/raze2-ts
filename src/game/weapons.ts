@@ -133,10 +133,25 @@ export interface WeaponDef {
   splashRadius?: number;
   /** Muzzle Y offset for held-gun position. */
   modPosY?: number;
-  /** Impact effect on walls / on units. */
+  /** Impact effect on walls / on units. For a catalog weapon both are the
+   *  authored `effHit`: `Bullet.as` fires the same clip at a wall, a unit and a
+   *  corpse (lines 233 / 327 / 356), and the victim's blood is spawned
+   *  *alongside* it rather than in its place. */
   wallEff?: string;
   unitEff?: string;
   effectKey?: string;
+  /** Muzzle effect clip (`effShoot`), played at the barrel tip when the round
+   *  leaves it (`Bullet.as:141`). Empty on the guns that flash nothing — the
+   *  flamethrower, the grenade launcher, the mine layer. */
+  muzzleEff?: string;
+  /**
+   * The projectile's own BH clip (`params[0]`), emitted at every collision
+   * substep along the flight path. For a rocket that reads as a smoke trail
+   * (`gas_small`); for a grenade the stream of `grenade` clips IS the tumbling
+   * body; for the flamethrower it is the jet itself, driven as one clip rather
+   * than re-spawned (see `BhBody`).
+   */
+  projTrail?: string;
 
   // --- per-weapon audio (Raze 2 shotSound/reload rig, doc 03 §4) ---------
   /** Fire-sound key (resolves via Sounds ALIASES/MANIFEST). */
@@ -389,15 +404,42 @@ function extraBehavior(extra: Record<string, unknown>): Partial<WeaponDef> {
   return out;
 }
 
-/** Impact effect keys by broad behaviour (reuse the port's existing effects). */
-function effectsFor(rayType: RayType, splash: boolean): Pick<WeaponDef, "wallEff" | "unitEff" | "effectKey"> {
-  if (rayType === "projectile") {
-    return splash
-      ? { wallEff: "rocketExplode", unitEff: "rocketExplode", effectKey: "Effect_Proj_Rocket" }
-      : { wallEff: "bulletExplode", unitEff: "bulletExplode", effectKey: "Effect_Bullet" };
-  }
-  if (rayType === "beam") return { wallEff: "lightning", unitEff: "lightning", effectKey: "Effect_Lightning" };
-  return { wallEff: "pistol", unitEff: "blood", effectKey: "Effect_Bullet" };
+/**
+ * Impact/muzzle/trail clips for one gun, straight off its catalog record.
+ *
+ * These used to be guessed from broad behaviour — every splash projectile got
+ * `"rocketExplode"`, every hitscan `"pistol"` — because the port had no art to
+ * point at and so invented names for what it drew by hand. It does have the art
+ * now (`tools/fx/bake_bh.py`), and the catalog has always carried the real
+ * names, so there is nothing left to guess: `effShoot` is the muzzle clip,
+ * `effHit` the impact clip, `params[0]` the round's own body/trail.
+ *
+ * The guessing cost more than fidelity. A rocket's blast is `gas_big` and a
+ * grenade's is *also* `gas_big`, but the sniper's is `spark_big` and the alien
+ * sniper's is `plasma_explode` — distinctions no behaviour flag can recover,
+ * since both of those are one splash bit apart from each other.
+ *
+ * Empty strings mean the original plays nothing there and are dropped, not
+ * substituted: the flamethrower and the grenade launcher have no muzzle flash.
+ */
+function effectsFor(
+  w: Raze2Weapon,
+  rayType: RayType,
+  splash: boolean,
+): Pick<WeaponDef, "wallEff" | "unitEff" | "effectKey" | "muzzleEff" | "projTrail"> {
+  const trail = Array.isArray(w.params) && typeof w.params[0] === "string"
+    ? (w.params[0] as string) : undefined;
+  // `effectKey` is the port's own Effect_*.as label, kept for the few places
+  // that branch on the shape of an impact rather than play a clip.
+  const effectKey = rayType === "projectile"
+    ? (splash ? "Effect_Proj_Rocket" : "Effect_Bullet")
+    : rayType === "beam" ? "Effect_Lightning" : "Effect_Bullet";
+  return {
+    ...(w.effHit ? { wallEff: w.effHit, unitEff: w.effHit } : {}),
+    ...(w.effShoot ? { muzzleEff: w.effShoot } : {}),
+    ...(trail ? { projTrail: trail } : {}),
+    effectKey,
+  };
 }
 
 /** Map one Raze 2 weapon record onto the port's WeaponDef. */
@@ -474,7 +516,7 @@ function raze2ToDef(w: Raze2Weapon): WeaponDef {
     ...(isProj ? projMotion(w) : {}),
     ...(isProj ? projBehavior(w) : {}),
     ...extraBehavior(extra),
-    ...effectsFor(rayType, splash),
+    ...effectsFor(w, rayType, splash),
     ...tracer,
     ...(muzzleTint != null ? { muzzleColor: muzzleTint } : {}),
     ...(sparkTint != null ? { sparkColor: sparkTint } : {}),
